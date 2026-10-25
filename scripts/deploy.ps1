@@ -58,7 +58,8 @@ Write-Success "Build output verified"
 # Step 4: Start server
 Write-Step "4/4 Starting server..."
 $env:NODE_ENV = "production"
-Write-Host "`nServer will start on http://localhost:3000" -ForegroundColor Yellow
+Write-Host "`nServer starting on http://0.0.0.0:3000" -ForegroundColor Yellow
+Write-Host "Access via: http://<your-ip>:3000" -ForegroundColor Yellow
 Write-Host "Press Ctrl+C to stop`n" -ForegroundColor Gray
 
 Set-Location "$rootDir\backend"

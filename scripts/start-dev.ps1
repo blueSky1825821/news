@@ -44,7 +44,8 @@ Write-Info "Frontend starting on http://localhost:3000 (PID: $($frontendJob.Id))
 
 Write-Host "`n============================================" -ForegroundColor Green
 Write-Host "  Both services are starting..." -ForegroundColor Green
-Write-Host "  Frontend: http://localhost:3000" -ForegroundColor Yellow
-Write-Host "  Backend:  http://localhost:3001" -ForegroundColor Yellow
+Write-Host "  Frontend: http://0.0.0.0:3000" -ForegroundColor Yellow
+Write-Host "  Backend:  http://0.0.0.0:3001" -ForegroundColor Yellow
+Write-Host "  Access via: http://<your-ip>:3000" -ForegroundColor Yellow
 Write-Host "============================================" -ForegroundColor Green
 Write-Host "`nClose the PowerShell windows to stop services." -ForegroundColor Gray

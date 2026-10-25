@@ -32,7 +32,8 @@ echo "  Build output verified"
 # Step 4: Start server
 echo -e "\n[4/4] Starting server..."
 export NODE_ENV=production
-echo -e "\nServer will start on http://localhost:3000"
+echo -e "\nServer starting on http://0.0.0.0:3000"
+echo -e "Access via: http://<your-ip>:3000"
 echo -e "Press Ctrl+C to stop\n"
 cd "$ROOT_DIR/backend"
 node src/server.js

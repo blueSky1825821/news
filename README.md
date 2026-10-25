@@ -150,11 +150,25 @@ npm run deploy
 
 后端会自动将 `frontend/dist` 作为静态文件提供服务，并支持前端路由 fallback。访问 `http://localhost:3000` 即可使用。
 
+### 外网访问
+
+部署后，服务默认监听 `0.0.0.0`，同一局域网内的其他设备可通过本机 IP 访问：
+
+```bash
+# 查看本机 IP
+# Windows: ipconfig
+# Linux/macOS: ipconfig 或 hostname -I
+
+# 他人通过浏览器访问
+http://<你的IP>:3000
+```
+
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `PORT` | 服务端口 | 3000 |
+| `HOST` | 监听地址 | `0.0.0.0`（所有网卡） |
 | `DB_PATH` | SQLite 数据库路径 | `data/news.db` |
 | `NODE_ENV` | 运行环境 | — |
 
