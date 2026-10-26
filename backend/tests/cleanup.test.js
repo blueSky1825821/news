@@ -58,33 +58,34 @@ describe('Cleanup Model', () => {
     const deleted = cleanupOldArticles(beforeDate);
     expect(deleted).toBe(0);
   });
-  describe('Cleanup Scheduler', () => {
-    let cronMock;
+});
 
-    beforeEach(async () => {
-      jest.resetModules();
-      cronMock = { schedule: jest.fn(() => ({ stop: jest.fn() })) };
-      jest.unstable_mockModule('node-cron', () => ({ default: cronMock }));
-    });
+describe('Cleanup Scheduler', () => {
+  let cronMock;
 
-    afterEach(() => {
-      delete process.env.CLEANUP_ENABLED;
-      delete process.env.CLEANUP_RETENTION_DAYS;
-    });
+  beforeEach(async () => {
+    jest.resetModules();
+    cronMock = { schedule: jest.fn(() => ({ stop: jest.fn() })) };
+    jest.unstable_mockModule('node-cron', () => ({ default: cronMock }));
+  });
 
-    it('does not register cron when CLEANUP_ENABLED=false', async () => {
-      process.env.CLEANUP_ENABLED = 'false';
-      const { startCleanupScheduler } = await import('../src/services/scheduler.js');
-      startCleanupScheduler();
-      expect(cronMock.schedule).not.toHaveBeenCalled();
-    });
+  afterEach(() => {
+    delete process.env.CLEANUP_ENABLED;
+    delete process.env.CLEANUP_RETENTION_DAYS;
+  });
 
-    it('registers cron with default retention when env is invalid', async () => {
-      process.env.CLEANUP_RETENTION_DAYS = 'abc';
-      const { startCleanupScheduler } = await import('../src/services/scheduler.js');
-      startCleanupScheduler();
-      expect(cronMock.schedule).toHaveBeenCalledTimes(1);
-      expect(cronMock.schedule.mock.calls[0][0]).toBe('0 0 * * *');
-    });
+  it('does not register cron when CLEANUP_ENABLED=false', async () => {
+    process.env.CLEANUP_ENABLED = 'false';
+    const { startCleanupScheduler } = await import('../src/services/scheduler.js');
+    startCleanupScheduler();
+    expect(cronMock.schedule).not.toHaveBeenCalled();
+  });
+
+  it('registers cron with default retention when env is invalid', async () => {
+    process.env.CLEANUP_RETENTION_DAYS = 'abc';
+    const { startCleanupScheduler } = await import('../src/services/scheduler.js');
+    startCleanupScheduler();
+    expect(cronMock.schedule).toHaveBeenCalledTimes(1);
+    expect(cronMock.schedule.mock.calls[0][0]).toBe('0 0 * * *');
   });
 });
