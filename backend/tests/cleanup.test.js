@@ -103,11 +103,18 @@ describe('Cleanup Scheduler', () => {
 
 
 describe('Cleanup API', () => {
-  beforeEach(() => {
+  let token;
+
+  beforeEach(async () => {
     process.env.DB_PATH = ':memory:';
     const db = getDb();
     initSchema(db);
     insertSource({ name: 'Test', rssUrl: 'http://test.com/rss', category: 'tech', isActive: 1 });
+
+    const authRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'test@example.com', password: 'password123', categories: ['tech'] });
+    token = authRes.body.data.token;
   });
 
   afterEach(() => {
@@ -125,7 +132,9 @@ describe('Cleanup API', () => {
       VALUES (?, ?, ?, datetime('now', '-100 days'))
     `).run('Old Article', 'http://example.com/old', source.id);
 
-    const res = await request(app).post('/api/crawl/cleanup/trigger');
+    const res = await request(app)
+      .post('/api/crawl/cleanup/trigger')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
     expect(res.body.data.deleted).toBe(1);

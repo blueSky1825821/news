@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { triggerManualCrawl, triggerManualCrawlForSource, getCleanupCutoffDate } from '../services/scheduler.js';
 import { cleanupOldArticles } from '../models/article.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post('/sources/:id', async (req, res, next) => {
   }
 });
 
-router.post('/cleanup/trigger', async (req, res, next) => {
+router.post('/cleanup/trigger', authMiddleware, async (req, res, next) => {
   try {
     const beforeDate = getCleanupCutoffDate();
     const deleted = cleanupOldArticles(beforeDate);
