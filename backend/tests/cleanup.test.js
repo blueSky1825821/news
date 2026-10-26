@@ -1,5 +1,4 @@
-import { jest } from '@jest/globals';
-import { getDb, closeDb, initSchema } from '../src/db.js';
+﻿import { getDb, closeDb, initSchema } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import { cleanupOldArticles } from '../src/models/article.js';
 import { flagArticle } from '../src/models/articleFlag.js';
@@ -31,14 +30,14 @@ describe('Cleanup Model', () => {
       VALUES (?, ?, ?, datetime('now', '-1 days'))
     `).run('Recent Article', 'http://example.com/recent', source.id);
 
-    db.prepare(`
+    const result = db.prepare(`
       INSERT INTO articles (title, originalUrl, sourceId, fetchedAt)
       VALUES (?, ?, ?, datetime('now', '-100 days'))
     `).run('Old Flagged Article', 'http://example.com/flagged', source.id);
-    const flaggedId = db.prepare('SELECT last_insert_rowid() as id').get().id;
-    flagArticle(flaggedId);
+    flagArticle(result.lastInsertRowid);
 
-    const deleted = cleanupOldArticles(90);
+    const beforeDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const deleted = cleanupOldArticles(beforeDate);
     expect(deleted).toBe(1);
 
     const remaining = db.prepare('SELECT title FROM articles ORDER BY title').all();
@@ -54,7 +53,8 @@ describe('Cleanup Model', () => {
       VALUES (?, ?, ?, datetime('now', '-1 days'))
     `).run('Recent Article', 'http://example.com/recent', source.id);
 
-    const deleted = cleanupOldArticles(90);
+    const beforeDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const deleted = cleanupOldArticles(beforeDate);
     expect(deleted).toBe(0);
   });
 });

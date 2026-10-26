@@ -82,15 +82,15 @@ export function listArticles({ page = 1, limit = 20, sourceId, category } = {}) 
   };
 }
 
-export function cleanupOldArticles(retentionDays) {
+export function cleanupOldArticles(beforeDate) {
   const db = getDb();
   const stmt = db.prepare(`
     DELETE FROM articles
-    WHERE fetchedAt < datetime('now', '-' || ? || ' days')
+    WHERE fetchedAt < ?
       AND NOT EXISTS (
         SELECT 1 FROM article_flags WHERE articleId = articles.id
       )
   `);
-  const result = stmt.run(retentionDays);
+  const result = stmt.run(beforeDate);
   return result.changes;
 }
