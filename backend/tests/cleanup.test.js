@@ -1,4 +1,4 @@
-﻿import { jest } from '@jest/globals';
+import { jest } from '@jest/globals';
 import { getDb, closeDb, initSchema } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import { cleanupOldArticles } from '../src/models/article.js';
