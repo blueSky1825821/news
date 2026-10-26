@@ -7,6 +7,7 @@ import { pushSummary } from './wechat.js';
 import { recordSuccess, recordFailure, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
+import { cleanupOldArticles } from '../models/article.js';
 
 let task = null;
 
@@ -105,5 +106,42 @@ export function stopSummaryPushScheduler() {
     summaryTask.stop();
     summaryTask = null;
     console.log('[Scheduler] Summary push stopped.');
+  }
+}
+let cleanupTask = null;
+
+export function startCleanupScheduler() {
+  if (cleanupTask) return;
+  if (process.env.CLEANUP_ENABLED === 'false') {
+    console.log('[Cleanup] Disabled.');
+    return;
+  }
+
+  let retentionDays = parseInt(process.env.CLEANUP_RETENTION_DAYS, 10);
+  if (!Number.isFinite(retentionDays) || retentionDays < 1) {
+    console.warn('[Cleanup] Invalid CLEANUP_RETENTION_DAYS, using default 90.');
+    retentionDays = 90;
+  }
+
+  cleanupTask = cron.schedule('0 0 * * *', async () => {
+    try {
+      const beforeDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const deleted = cleanupOldArticles(beforeDate);
+      console.log(`[Cleanup] Deleted ${deleted} old articles.`);
+    } catch (err) {
+      console.error('[Cleanup] Failed:', err.message);
+    }
+  }, {
+    timezone: 'Asia/Shanghai'
+  });
+
+  console.log(`[Cleanup] Scheduler started. Retention: ${retentionDays} days.`);
+}
+
+export function stopCleanupScheduler() {
+  if (cleanupTask) {
+    cleanupTask.stop();
+    cleanupTask = null;
+    console.log('[Cleanup] Scheduler stopped.');
   }
 }
