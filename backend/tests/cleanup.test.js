@@ -94,9 +94,9 @@ describe('Cleanup Scheduler', () => {
   it('stops cleanup scheduler', async () => {
     const { startCleanupScheduler, stopCleanupScheduler } = await import('../src/services/scheduler.js');
     startCleanupScheduler();
-    stopCleanupScheduler();
-    // 如果 stop 不抛异常就算通过
-    expect(true).toBe(true);
+    expect(() => stopCleanupScheduler()).not.toThrow();
+    // Verify internal state was actually reset by confirming restart works
+    expect(() => startCleanupScheduler()).not.toThrow();
   });
 });
 

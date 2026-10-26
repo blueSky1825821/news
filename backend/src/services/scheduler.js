@@ -17,9 +17,6 @@ export function resolveRetentionDays() {
   const raw = process.env.CLEANUP_RETENTION_DAYS;
   const days = parseInt(raw, 10);
   if (!Number.isFinite(days) || days < 1) {
-    if (raw !== undefined && raw !== '') {
-      console.warn(`[Cleanup] Invalid CLEANUP_RETENTION_DAYS "${raw}", using default ${DEFAULT_RETENTION_DAYS}.`);
-    }
     return DEFAULT_RETENTION_DAYS;
   }
   return days;
@@ -138,7 +135,11 @@ export function startCleanupScheduler() {
     return;
   }
 
+  const raw = process.env.CLEANUP_RETENTION_DAYS;
   const retentionDays = resolveRetentionDays();
+  if (raw !== undefined && raw !== '' && parseInt(raw, 10) !== retentionDays) {
+    console.warn(`[Cleanup] Invalid CLEANUP_RETENTION_DAYS "${raw}", using default ${DEFAULT_RETENTION_DAYS}.`);
+  }
 
   cleanupTask = cron.schedule('0 0 * * *', () => {
     try {
