@@ -94,11 +94,13 @@ describe('Cleanup Scheduler', () => {
   it('stops cleanup scheduler', async () => {
     const { startCleanupScheduler, stopCleanupScheduler } = await import('../src/services/scheduler.js');
     startCleanupScheduler();
+    expect(cronMock.schedule).toHaveBeenCalledTimes(1);
     expect(() => stopCleanupScheduler()).not.toThrow();
-    // Verify internal state was actually reset by confirming restart works
-    expect(() => startCleanupScheduler()).not.toThrow();
+    startCleanupScheduler();
+    expect(cronMock.schedule).toHaveBeenCalledTimes(2);
   });
 });
+
 
 describe('Cleanup API', () => {
   beforeEach(() => {
