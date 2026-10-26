@@ -13,6 +13,14 @@ import { cleanupOldArticles } from '../models/article.js';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
+export function resolveRetentionDays() {
+  const days = parseInt(process.env.CLEANUP_RETENTION_DAYS, 10);
+  if (!Number.isFinite(days) || days < 1) {
+    return DEFAULT_RETENTION_DAYS;
+  }
+  return days;
+}
+
 let task = null;
 
 export function startScheduler(cronExpression = '*/30 * * * *') {
@@ -121,11 +129,7 @@ export function startCleanupScheduler() {
     return;
   }
 
-  let retentionDays = parseInt(process.env.CLEANUP_RETENTION_DAYS, 10);
-  if (!Number.isFinite(retentionDays) || retentionDays < 1) {
-    console.warn('[Cleanup] Invalid CLEANUP_RETENTION_DAYS, using default ' + DEFAULT_RETENTION_DAYS + '.');
-    retentionDays = DEFAULT_RETENTION_DAYS;
-  }
+  const retentionDays = resolveRetentionDays();
 
   cleanupTask = cron.schedule('0 0 * * *', () => {
     try {
