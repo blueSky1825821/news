@@ -14,11 +14,20 @@ import { cleanupOldArticles } from '../models/article.js';
 const DEFAULT_RETENTION_DAYS = 90;
 
 export function resolveRetentionDays() {
-  const days = parseInt(process.env.CLEANUP_RETENTION_DAYS, 10);
+  const raw = process.env.CLEANUP_RETENTION_DAYS;
+  const days = parseInt(raw, 10);
   if (!Number.isFinite(days) || days < 1) {
+    if (raw !== undefined && raw !== '') {
+      console.warn(`[Cleanup] Invalid CLEANUP_RETENTION_DAYS "${raw}", using default ${DEFAULT_RETENTION_DAYS}.`);
+    }
     return DEFAULT_RETENTION_DAYS;
   }
   return days;
+}
+
+export function getCleanupCutoffDate() {
+  const retentionDays = resolveRetentionDays();
+  return new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
 let task = null;
@@ -133,7 +142,7 @@ export function startCleanupScheduler() {
 
   cleanupTask = cron.schedule('0 0 * * *', () => {
     try {
-      const beforeDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const beforeDate = getCleanupCutoffDate();
       const deleted = cleanupOldArticles(beforeDate);
       console.log(`[Cleanup] Deleted ${deleted} old articles.`);
     } catch (err) {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { triggerManualCrawl, triggerManualCrawlForSource, resolveRetentionDays } from '../services/scheduler.js';
+import { triggerManualCrawl, triggerManualCrawlForSource, getCleanupCutoffDate } from '../services/scheduler.js';
 import { cleanupOldArticles } from '../models/article.js';
 
 const router = Router();
@@ -30,8 +30,7 @@ router.post('/sources/:id', async (req, res, next) => {
 
 router.post('/cleanup/trigger', async (req, res, next) => {
   try {
-    const retentionDays = resolveRetentionDays();
-    const beforeDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const beforeDate = getCleanupCutoffDate();
     const deleted = cleanupOldArticles(beforeDate);
     res.sendJson(0, 'Cleanup finished', { deleted });
   } catch (err) {
