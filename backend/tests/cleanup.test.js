@@ -1,3 +1,5 @@
+import { app } from '../src/app.js';
+import request from 'supertest';
 import { jest } from '@jest/globals';
 import { getDb, closeDb, initSchema } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
@@ -95,5 +97,38 @@ describe('Cleanup Scheduler', () => {
     stopCleanupScheduler();
     // 如果 stop 不抛异常就算通过
     expect(true).toBe(true);
+  });
+});
+
+describe('Cleanup API', () => {
+  beforeEach(() => {
+    process.env.DB_PATH = ':memory:';
+    const db = getDb();
+    initSchema(db);
+    insertSource({ name: 'Test', rssUrl: 'http://test.com/rss', category: 'tech', isActive: 1 });
+  });
+
+  afterEach(() => {
+    closeDb();
+    delete process.env.DB_PATH;
+    delete process.env.CLEANUP_RETENTION_DAYS;
+  });
+
+  it('POST /api/crawl/cleanup/trigger performs cleanup', async () => {
+    const db = getDb();
+    const source = getAllSources()[0];
+
+    db.prepare(`
+      INSERT INTO articles (title, originalUrl, sourceId, fetchedAt)
+      VALUES (?, ?, ?, datetime('now', '-100 days'))
+    `).run('Old Article', 'http://example.com/old', source.id);
+
+    const res = await request(app).post('/api/crawl/cleanup/trigger');
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+    expect(res.body.data.deleted).toBe(1);
+
+    const remaining = db.prepare('SELECT COUNT(*) as count FROM articles').get();
+    expect(remaining.count).toBe(0);
   });
 });
