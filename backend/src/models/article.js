@@ -86,7 +86,7 @@ export function cleanupOldArticles(beforeDate) {
   const db = getDb();
   const stmt = db.prepare(`
     DELETE FROM articles
-    WHERE fetchedAt < ?
+    WHERE fetchedAt < datetime(?)
       AND NOT EXISTS (
         SELECT 1 FROM article_flags WHERE articleId = articles.id
       )
