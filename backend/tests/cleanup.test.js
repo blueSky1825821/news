@@ -1,5 +1,5 @@
-import { jest } from '@jest/globals';
-﻿import { getDb, closeDb, initSchema } from '../src/db.js';
+﻿import { jest } from '@jest/globals';
+import { getDb, closeDb, initSchema } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import { cleanupOldArticles } from '../src/models/article.js';
 import { flagArticle } from '../src/models/articleFlag.js';
@@ -87,5 +87,13 @@ describe('Cleanup Scheduler', () => {
     startCleanupScheduler();
     expect(cronMock.schedule).toHaveBeenCalledTimes(1);
     expect(cronMock.schedule.mock.calls[0][0]).toBe('0 0 * * *');
+  });
+
+  it('stops cleanup scheduler', async () => {
+    const { startCleanupScheduler, stopCleanupScheduler } = await import('../src/services/scheduler.js');
+    startCleanupScheduler();
+    stopCleanupScheduler();
+    // 如果 stop 不抛异常就算通过
+    expect(true).toBe(true);
   });
 });

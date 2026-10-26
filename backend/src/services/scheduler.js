@@ -7,7 +7,11 @@ import { pushSummary } from './wechat.js';
 import { recordSuccess, recordFailure, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
+
+
 import { cleanupOldArticles } from '../models/article.js';
+
+const DEFAULT_RETENTION_DAYS = 90;
 
 let task = null;
 
@@ -119,11 +123,11 @@ export function startCleanupScheduler() {
 
   let retentionDays = parseInt(process.env.CLEANUP_RETENTION_DAYS, 10);
   if (!Number.isFinite(retentionDays) || retentionDays < 1) {
-    console.warn('[Cleanup] Invalid CLEANUP_RETENTION_DAYS, using default 90.');
-    retentionDays = 90;
+    console.warn('[Cleanup] Invalid CLEANUP_RETENTION_DAYS, using default ' + DEFAULT_RETENTION_DAYS + '.');
+    retentionDays = DEFAULT_RETENTION_DAYS;
   }
 
-  cleanupTask = cron.schedule('0 0 * * *', async () => {
+  cleanupTask = cron.schedule('0 0 * * *', () => {
     try {
       const beforeDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
       const deleted = cleanupOldArticles(beforeDate);
