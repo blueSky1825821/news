@@ -34,6 +34,9 @@ echo -e "\n[4/4] Starting server..."
 export NODE_ENV=production
 echo -e "\nServer starting on http://0.0.0.0:3000"
 echo -e "Access via: http://<your-ip>:3000"
-echo -e "Press Ctrl+C to stop\n"
+echo -e "Logs: $ROOT_DIR/scripts/deploy.log"
+echo -e "Stop: kill $(cat "$ROOT_DIR/scripts/server.pid 2>/dev/null")"
 cd "$ROOT_DIR/backend"
-node src/server.js
+nohup node src/server.js > "$ROOT_DIR/scripts/deploy.log" 2>&1 &
+echo $! > "$ROOT_DIR/scripts/server.pid"
+echo -e "Server started in background. PID: $!\n"

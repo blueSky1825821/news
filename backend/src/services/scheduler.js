@@ -32,10 +32,14 @@ let task = null;
 export function startScheduler(cronExpression = '*/30 * * * *') {
   if (task) return;
   task = cron.schedule(cronExpression, async () => {
-    console.log('[Scheduler] Starting crawl...');
-    const sources = getActiveSources();
-    await crawlAllSources(sources);
-    console.log('[Scheduler] Crawl finished.');
+    try {
+      console.log('[Scheduler] Starting crawl...');
+      const sources = getActiveSources();
+      await crawlAllSources(sources);
+      console.log('[Scheduler] Crawl finished.');
+    } catch (err) {
+      console.error('[Scheduler] Crawl task failed:', err.message);
+    }
   }, {
     timezone: 'Asia/Shanghai'
   });
