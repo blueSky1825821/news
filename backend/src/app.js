@@ -30,11 +30,16 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/users/categories', userCategoriesRouter);
 app.use('/api/wechat', wechatRouter);
 
-// Serve frontend static files in production
+// Serve frontend static files in production under /news
 const distPath = path.join(__dirname, '../../frontend/dist');
-app.use(express.static(distPath));
-app.get('*', (req, res) => {
+app.use('/news', express.static(distPath));
+app.get('/news/*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// Redirect root to /news for convenience
+app.get('/', (req, res) => {
+  res.redirect('/news/');
 });
 
 app.use(errorHandler);

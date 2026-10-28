@@ -40,12 +40,12 @@ Start-Sleep -Seconds 2
 # Step 3: Start frontend
 Write-Step "3/3 Starting frontend dev server..."
 $frontendJob = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "Set-Location '$rootDir\frontend'; npm run dev" -PassThru
-Write-Info "Frontend starting on http://localhost:3000 (PID: $($frontendJob.Id))"
+Write-Info "Frontend starting on http://localhost:3000/news/ (PID: $($frontendJob.Id))"
 
 Write-Host "`n============================================" -ForegroundColor Green
 Write-Host "  Both services are starting..." -ForegroundColor Green
-Write-Host "  Frontend: http://0.0.0.0:3000" -ForegroundColor Yellow
+Write-Host "  Frontend: http://0.0.0.0:3000/news/" -ForegroundColor Yellow
 Write-Host "  Backend:  http://0.0.0.0:3001" -ForegroundColor Yellow
-Write-Host "  Access via: http://<your-ip>:3000" -ForegroundColor Yellow
+Write-Host "  Access via: http://<your-ip>:3000/news/" -ForegroundColor Yellow
 Write-Host "============================================" -ForegroundColor Green
 Write-Host "`nClose the PowerShell windows to stop services." -ForegroundColor Gray

@@ -102,8 +102,8 @@ npm run dev
 npm run deploy
 ```
 
-- 开发模式：前端 `http://localhost:3000`，后端 `http://localhost:3001`
-- 生产模式：`http://localhost:3000`（前端静态文件 + API 同端口）
+- 开发模式：前端 `http://localhost:3000/news/`，后端 `http://localhost:3001`
+- 生产模式：`http://localhost:3000/news/`（前端静态文件 + API 同端口）
 
 ### 方式二：手动启动
 
@@ -128,7 +128,7 @@ npm run dev
 - 写入默认 RSS 源（中国新闻网、IT之家、少数派、雷锋网等已验证可用源）
 - 启动定时调度，按各来源的 `fetchIntervalMinutes` 分别触发抓取
 
-打开浏览器访问 <http://localhost:3000> 即可使用。
+打开浏览器访问 <http://localhost:3000/news/> 即可使用。
 
 > 首次运行数据库为空，可点击"立即触发抓取"或等待几分钟后刷新页面。
 
@@ -148,7 +148,7 @@ npm run deploy
 2. 安装后端生产依赖
 3. 启动后端服务（默认端口 3000）
 
-后端会自动将 `frontend/dist` 作为静态文件提供服务，并支持前端路由 fallback。访问 `http://localhost:3000` 即可使用。
+后端会将 `frontend/dist` 作为静态文件挂载到 `/news` 提供服务，并支持前端路由 fallback。访问 `http://localhost:3000/news/` 即可使用。
 
 ### 外网访问
 
@@ -160,7 +160,7 @@ npm run deploy
 # Linux/macOS: ipconfig 或 hostname -I
 
 # 他人通过浏览器访问
-http://<你的IP>:3000
+http://<你的IP>:3000/news/
 ```
 
 ### 环境变量
@@ -287,7 +287,7 @@ npm run preview    # 预览生产构建
 
 ### 前端管理页面
 
-访问 `http://localhost:3000/sources` 可：
+访问 `http://localhost:3000/news/sources` 可：
 - 查看所有来源的健康状态、连续失败次数、最后错误
 - 重新激活单个或全部已停用来源
 - 删除来源（会同时删除该来源下的历史文章）

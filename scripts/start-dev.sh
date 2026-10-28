@@ -32,14 +32,14 @@ echo -e "\n[3/3] Starting frontend dev server..."
 cd "$ROOT_DIR/frontend"
 npm run dev &
 FRONTEND_PID=$!
-echo "  Frontend starting on http://localhost:3000 (PID: $FRONTEND_PID)"
+echo "  Frontend starting on http://localhost:3000/news/ (PID: $FRONTEND_PID)"
 
 echo ""
 echo "============================================"
 echo "  Both services are starting..."
-echo "  Frontend: http://0.0.0.0:3000"
+echo "  Frontend: http://0.0.0.0:3000/news/"
 echo "  Backend:  http://0.0.0.0:3001"
-echo "  Access via: http://<your-ip>:3000"
+echo "  Access via: http://<your-ip>:3000/news/"
 echo "============================================"
 echo ""
 echo "Press Ctrl+C to stop all services."
