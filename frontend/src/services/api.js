@@ -1,4 +1,4 @@
-﻿const BASE_URL = '';
+﻿const BASE_URL = '/news';
 
 async function request(url, options = {}) {
   const res = await fetch(BASE_URL + url, {

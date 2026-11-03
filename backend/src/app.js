@@ -30,6 +30,16 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/users/categories', userCategoriesRouter);
 app.use('/api/wechat', wechatRouter);
 
+// Mirror API routes under /news for unified prefix access
+app.use('/news/api/articles', articlesRouter);
+app.use('/news/api/sources', sourcesRouter);
+app.use('/news/api/crawl', crawlRouter);
+app.use('/news/api/auth', authRouter);
+app.use('/news/api/categories', categoriesRouter);
+app.use('/news/api/settings', settingsRouter);
+app.use('/news/api/users/categories', userCategoriesRouter);
+app.use('/news/api/wechat', wechatRouter);
+
 // Serve frontend static files in production under /news
 const distPath = path.join(__dirname, '../../frontend/dist');
 app.use('/news', express.static(distPath));
