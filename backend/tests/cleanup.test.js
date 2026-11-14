@@ -106,6 +106,7 @@ describe('Cleanup API', () => {
   let token;
 
   beforeEach(async () => {
+    process.env.ADMIN_EMAILS = 'test@example.com';
     process.env.DB_PATH = ':memory:';
     const db = getDb();
     initSchema(db);
@@ -118,6 +119,7 @@ describe('Cleanup API', () => {
   });
 
   afterEach(() => {
+    delete process.env.ADMIN_EMAILS;
     closeDb();
     delete process.env.DB_PATH;
     delete process.env.CLEANUP_RETENTION_DAYS;

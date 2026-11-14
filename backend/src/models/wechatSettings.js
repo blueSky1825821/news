@@ -30,7 +30,7 @@ export function setWechatSettings({ appId, appSecret, accessToken, tokenExpiresA
   } else {
     const stmt = db.prepare(`
       INSERT INTO wechat_settings (id, appId, appSecret, accessToken, tokenExpiresAt, previewOpenId, summaryPushEnabled, summaryPushCron)
-      VALUES (1, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, '0 8 * * *'))
+      VALUES (1, ?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, '0 8 * * *'))
     `);
     stmt.run(...values);
   }

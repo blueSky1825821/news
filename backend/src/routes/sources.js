@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getAllSources, getSourceById, deleteSource } from '../models/source.js';
 import { listHealth, reactivateSource } from '../models/sourceHealth.js';
+import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -12,6 +13,8 @@ router.get('/', (req, res, next) => {
     next(err);
   }
 });
+
+router.use(authMiddleware, adminMiddleware);
 
 router.get('/health', (req, res, next) => {
   try {

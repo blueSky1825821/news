@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
-import { createUser, findUserByEmail, findUserById } from '../models/user.js';
+import { createUser, findUserByEmail, findUserById, isWechatUser } from '../models/user.js';
 import { getUserCategories, setUserCategories } from '../models/userCategory.js';
-import { generateToken, authMiddleware } from '../middleware/auth.js';
+import { generateToken, authMiddleware, getUserRole } from '../middleware/auth.js';
 import { CATEGORY_NAMES } from '../constants/categories.js';
 
 const router = Router();
@@ -66,6 +66,8 @@ router.post('/register', async (req, res, next) => {
       user: {
         id: user.id,
         email: user.email,
+        role: getUserRole(user),
+        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
         categories: selectedCategories
       },
       token
@@ -77,7 +79,7 @@ router.post('/register', async (req, res, next) => {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, adminLogin } = req.body;
 
     if (!email || !password) {
       const err = new Error('Email and password are required');
@@ -103,6 +105,13 @@ router.post('/login', async (req, res, next) => {
       throw err;
     }
 
+    if (adminLogin && getUserRole(user) !== 'admin') {
+      const err = new Error('该账号没有管理员权限');
+      err.statusCode = 403;
+      err.code = 1011;
+      throw err;
+    }
+
     const categories = getUserCategories(user.id);
     const token = generateToken({ userId: user.id, email: user.email });
 
@@ -110,6 +119,8 @@ router.post('/login', async (req, res, next) => {
       user: {
         id: user.id,
         email: user.email,
+        role: getUserRole(user),
+        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
         categories
       },
       token
@@ -134,6 +145,8 @@ router.get('/me', authMiddleware, (req, res, next) => {
       user: {
         id: user.id,
         email: user.email,
+        role: getUserRole(user),
+        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
         categories
       }
     });

@@ -28,7 +28,7 @@ export function getRecentArticles(limit = 10, hours = 24) {
     SELECT a.*, s.name as sourceName, s.category
     FROM articles a
     JOIN sources s ON a.sourceId = s.id
-    WHERE a.fetchedAt >= ?
+    WHERE datetime(a.fetchedAt) >= datetime(?)
     ORDER BY a.publishedAt DESC, a.id DESC
     LIMIT ?
   `);

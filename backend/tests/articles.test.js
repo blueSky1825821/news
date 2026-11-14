@@ -26,6 +26,7 @@ describe('Articles API', () => {
   });
 
   afterEach(() => {
+    delete process.env.ADMIN_EMAILS;
     closeDb();
     delete process.env.DB_PATH;
   });
@@ -64,7 +65,11 @@ describe('Articles API', () => {
   });
 
   it('POST /api/crawl/trigger returns results', async () => {
-    const res = await request(app).post('/api/crawl/trigger');
+    process.env.ADMIN_EMAILS = 'admin@example.com';
+    const auth = await request(app).post('/api/auth/register')
+      .send({ email: 'admin@example.com', password: 'password123' });
+    const res = await request(app).post('/api/crawl/trigger')
+      .set('Authorization', `Bearer ${auth.body.data.token}`);
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
     expect(res.body.message).toContain('Crawl finished');

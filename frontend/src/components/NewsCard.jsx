@@ -2,14 +2,15 @@
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 
-export default function NewsCard({ article, isActive, onPlay }) {
+export default function NewsCard({ article, isActive, onPlay, isAdmin = false }) {
   const [isFlagged, setIsFlagged] = useState(false);
 
   useEffect(() => {
+    if (!isAdmin) { setIsFlagged(false); return; }
     api.getFlaggedArticleIds().then((data) => {
       setIsFlagged(data.articleIds?.includes(article.id) || false);
     }).catch(() => {});
-  }, [article.id]);
+  }, [article.id, isAdmin]);
 
   const handleToggleFlag = async (e) => {
     e.preventDefault();
@@ -38,13 +39,13 @@ export default function NewsCard({ article, isActive, onPlay }) {
             >
               {article.title}
             </Link>
-            <button
+            {isAdmin && <button
               onClick={handleToggleFlag}
               className="ml-2 text-lg focus:outline-none"
               title={isFlagged ? '取消标记' : '标记为重要'}
             >
               {isFlagged ? '★' : '☆'}
-            </button>
+            </button>}
           </div>
           <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
             <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">

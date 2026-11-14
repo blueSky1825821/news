@@ -1,10 +1,12 @@
 ﻿const BASE_URL = '/news';
 
 async function request(url, options = {}) {
+  const token = localStorage.getItem('news-auth-token');
   const res = await fetch(BASE_URL + url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
   });
@@ -97,7 +99,7 @@ export const api = {
   },
 
   setUserCategories(categories) {
-    return request('/api/user-categories', {
+    return request('/api/users/categories', {
       method: 'PUT',
       body: JSON.stringify({ categories })
     });
@@ -119,6 +121,30 @@ export const api = {
   },
 
   // WeChat
+  getWechatLoginStatus() {
+    return request('/api/wechat/auth/status');
+  },
+
+  exchangeWechatTicket(ticket) {
+    return request('/api/wechat/auth/exchange', { method: 'POST', body: JSON.stringify({ ticket }) });
+  },
+
+  createWechatPush(articleIds) {
+    return request('/api/wechat/pushes', { method: 'POST', body: JSON.stringify({ articleIds }) });
+  },
+
+  sendWechatPush(id, preview = false) {
+    return request(`/api/wechat/pushes/${id}/send`, { method: 'POST', body: JSON.stringify({ preview, confirm: !preview }) });
+  },
+
+  getWechatPush(id) {
+    return request(`/api/wechat/pushes/${id}`);
+  },
+
+  getWechatPushLogs() {
+    return request('/api/wechat/logs');
+  },
+
   getWechatSettings() {
     return request('/api/wechat/settings');
   },

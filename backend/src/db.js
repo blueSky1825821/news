@@ -51,7 +51,7 @@ export function initSchema(db) {
       accessToken TEXT,
       tokenExpiresAt DATETIME,
       previewOpenId TEXT,
-      summaryPushEnabled BOOLEAN NOT NULL DEFAULT 1,
+      summaryPushEnabled BOOLEAN NOT NULL DEFAULT 0,
       summaryPushCron TEXT NOT NULL DEFAULT '0 8 * * *',
       updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -95,6 +95,33 @@ export function initSchema(db) {
       lastError TEXT,
       lastErrorAt DATETIME,
       FOREIGN KEY (sourceId) REFERENCES sources(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS wechat_users (
+      appId TEXT NOT NULL,
+      openId TEXT NOT NULL,
+      userId INTEGER NOT NULL UNIQUE REFERENCES users(id),
+      PRIMARY KEY (appId, openId)
+    );
+    CREATE TABLE IF NOT EXISTS wechat_oauth_flows (
+      state TEXT PRIMARY KEY,
+      browserHash TEXT NOT NULL,
+      returnTo TEXT NOT NULL,
+      expiresAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wechat_login_tickets (
+      ticketHash TEXT PRIMARY KEY,
+      browserHash TEXT NOT NULL,
+      userId INTEGER NOT NULL,
+      returnTo TEXT NOT NULL,
+      expiresAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS news_pushes (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      articles TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 }

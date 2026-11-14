@@ -71,12 +71,8 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
-    if (!user && token) {
-      loadUser();
-    } else {
-      setIsLoading(false);
-    }
-  }, [user, token, loadUser]);
+    loadUser();
+  }, [loadUser]);
 
   const handleAuthResponse = useCallback((data) => {
     const { user, token } = data;
@@ -87,14 +83,20 @@ export function useAuth() {
     return user;
   }, []);
 
-  const login = useCallback(async ({ email, password }) => {
-    const data = await api.login({ email, password });
+  const login = useCallback(async ({ email, password, adminLogin }) => {
+    const data = await api.login({ email, password, adminLogin });
     return handleAuthResponse(data);
   }, [handleAuthResponse]);
 
   const register = useCallback(async ({ email, password, categories }) => {
     const data = await api.register({ email, password, categories });
     return handleAuthResponse(data);
+  }, [handleAuthResponse]);
+
+  const wechatLogin = useCallback(async (ticket) => {
+    const data = await api.exchangeWechatTicket(ticket);
+    handleAuthResponse(data);
+    return data.returnTo;
   }, [handleAuthResponse]);
 
   const logout = useCallback(() => {
@@ -118,6 +120,7 @@ export function useAuth() {
     isLoading,
     isLoggedIn: !!user,
     login,
+    wechatLogin,
     register,
     logout,
     updateCategories

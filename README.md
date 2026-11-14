@@ -346,3 +346,10 @@ curl -X PUT http://localhost:3000/api/settings/failure-threshold -H "Content-Typ
 ## 许可证
 
 MIT
+# 管理员登录与 RSS 来源权限
+
+微信公众号登录、后台主动推送单条新闻及新闻列表的配置见 [微信公众号接入说明](docs/wechat-integration.md)。
+
+在 `backend/.env` 配置文件中设置 `ADMIN_EMAILS=admin@example.com`（多个邮箱用英文逗号分隔）和至少 32 个字符的随机 `JWT_SECRET`，然后重启后端。首次部署可复制 `backend/.env.example` 为 `backend/.env`。程序启动时自动读取配置，已有进程环境变量优先。使用对应邮箱注册账号后，可在登录页勾选“管理员登录”。邮箱请与账号实际保存的邮箱保持一致。
+
+未配置的账号均为普通用户。普通用户可以浏览新闻和来源筛选列表，但不能进入来源管理、修改 RSS 来源、查看来源健康信息、修改失败阈值或手动触发抓取。管理员权限在服务端逐次校验，注册参数不能赋予权限。

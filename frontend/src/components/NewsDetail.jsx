@@ -40,7 +40,7 @@ function extractPlainText(html) {
   return div.textContent || div.innerText || '';
 }
 
-export default function NewsDetail({ onPlaySingle }) {
+export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnabled = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [article, setArticle] = useState(null);
@@ -69,11 +69,11 @@ export default function NewsDetail({ onPlaySingle }) {
   }, [id]);
 
   useEffect(() => {
-    if (!article) return;
+    if (!article || !isAdmin) { setIsFlagged(false); return; }
     api.getFlaggedArticleIds().then((data) => {
       setIsFlagged(data.articleIds?.includes(article.id) || false);
     }).catch(() => {});
-  }, [article?.id]);
+  }, [article?.id, isAdmin]);
 
   const handleToggleFlag = async () => {
     try {
@@ -87,7 +87,8 @@ export default function NewsDetail({ onPlaySingle }) {
   const handlePreview = async () => {
     setPreviewLoading(true);
     try {
-      const result = await api.sendPreview();
+      const draft = await api.createWechatPush([article.id]);
+      const result = await api.sendWechatPush(draft.id, true);
       if (result.status === 'skipped') {
         alert('暂无文章可推送，请先抓取新闻');
       } else {
@@ -156,9 +157,9 @@ export default function NewsDetail({ onPlaySingle }) {
 
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold text-gray-900">{article.title}</h1>
-        <button onClick={handleToggleFlag} className="text-xl" title={isFlagged ? '取消标记' : '标记为重要'}>
+        {isAdmin && <button onClick={handleToggleFlag} className="text-xl" title={isFlagged ? '取消标记' : '标记为重要'}>
           {isFlagged ? '★' : '☆'}
-        </button>
+        </button>}
       </div>
       <div className="mt-2 flex items-center gap-3 text-sm text-gray-500">
         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
@@ -184,13 +185,13 @@ export default function NewsDetail({ onPlaySingle }) {
         >
           查看原文
         </a>
-        <button
+        {isAdmin && massSendEnabled && <button
           onClick={handlePreview}
           disabled={previewLoading}
           className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
         >
           {previewLoading ? '推送中...' : '推送到公众号预览'}
-        </button>
+        </button>}
       </div>
 
       <div className="mt-6">

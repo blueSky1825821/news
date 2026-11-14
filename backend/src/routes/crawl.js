@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { triggerManualCrawl, triggerManualCrawlForSource, getCleanupCutoffDate } from '../services/scheduler.js';
 import { cleanupOldArticles } from '../models/article.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+router.use(authMiddleware, adminMiddleware);
 
 router.post('/trigger', async (req, res, next) => {
   try {

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { getFailureThreshold, setFailureThreshold } from '../models/settings.js';
+import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+router.use(authMiddleware, adminMiddleware);
 
 router.get('/failure-threshold', (req, res, next) => {
   try {

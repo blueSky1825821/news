@@ -3,7 +3,7 @@ import { api } from '../services/api.js';
 import NewsCard from './NewsCard.jsx';
 import SourceFilter from './SourceFilter.jsx';
 
-export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll }) {
+export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, isAdmin = false }) {
   const [articles, setArticles] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [sources, setSources] = useState([]);
@@ -78,19 +78,20 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll }) {
       ) : articles.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
           <p className="text-gray-600">暂无新闻，请等待首次抓取完成</p>
-          <button
+          {isAdmin && <button
             onClick={handleTriggerCrawl}
             disabled={triggering}
             className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {triggering ? '触发中...' : '立即触发抓取'}
-          </button>
+          </button>}
         </div>
       ) : (
         <>
           <div className="space-y-4">
             {articles.map((article) => (
               <NewsCard
+                isAdmin={isAdmin}
                 key={article.id}
                 article={article}
                 isActive={activeArticleId === article.id}

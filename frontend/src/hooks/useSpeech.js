@@ -194,7 +194,7 @@ export function useSpeech(options = {}) {
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis.cancel();
+      window.speechSynthesis?.cancel();
     };
   }, []);
 

@@ -1,3 +1,4 @@
+import './config.js';
 import { app } from './app.js';
 import { getDb, closeDb } from './db.js';
 import { seedSources } from './seed.js';

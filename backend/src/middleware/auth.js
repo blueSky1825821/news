@@ -1,6 +1,26 @@
 import jwt from 'jsonwebtoken';
+import { findUserById, isWechatUser } from '../models/user.js';
+
+export function getUserRole(user) {
+  const admins = (process.env.ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean);
+  return user && !isWechatUser(user.id) && admins.includes(user.email.toLowerCase()) ? 'admin' : 'user';
+}
+
+export function adminMiddleware(req, res, next) {
+  const user = findUserById(req.userId);
+  if (getUserRole(user) !== 'admin') {
+    const err = new Error('需要管理员权限');
+    err.statusCode = 403;
+    err.code = 1011;
+    return next(err);
+  }
+  next();
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'news-app-dev-secret-change-in-production';
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
+  throw new Error('生产环境必须配置至少 32 个字符的 JWT_SECRET');
+}
 const JWT_EXPIRES_IN = '7d';
 
 export function generateToken(payload) {

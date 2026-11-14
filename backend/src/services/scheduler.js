@@ -4,6 +4,7 @@ import { crawlAllSources, crawlSource } from './crawler.js';
 import { getWechatSettings } from '../models/wechatSettings.js';
 import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
+import { wechatCapabilities } from './wechatConfig.js';
 import { recordSuccess, recordFailure, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
@@ -94,6 +95,7 @@ export function startSummaryPushScheduler() {
 
   summaryTask = cron.schedule(cronExpression, async () => {
     try {
+      if (!wechatCapabilities().massSendEnabled) return;
       const settings = getWechatSettings();
       if (!settings || !settings.summaryPushEnabled) {
         console.log('[WechatPush] Summary push disabled, skipping.');

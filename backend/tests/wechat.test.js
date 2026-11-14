@@ -27,7 +27,7 @@ describe('WechatSettings', () => {
     expect(settings.appId).toBe('wx123');
     expect(settings.appSecret).toBe('secret456');
     expect(settings.previewOpenId).toBe('openid789');
-    expect(settings.summaryPushEnabled).toBe(1);
+    expect(settings.summaryPushEnabled).toBe(0);
     expect(settings.summaryPushCron).toBe('0 8 * * *');
   });
 });
@@ -116,26 +116,34 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 
 describe('Wechat Routes', () => {
-  beforeEach(() => {
+  let token;
+  beforeEach(async () => {
     process.env.DB_PATH = ':memory:';
+    process.env.ADMIN_EMAILS = 'admin@example.com';
     const db = getDb();
     initSchema(db);
+    const auth = await request(app).post('/api/auth/register').send({ email: 'admin@example.com', password: 'password123' });
+    token = auth.body.data.token;
   });
 
   afterEach(() => {
+    stopSummaryPushScheduler();
+    delete process.env.ADMIN_EMAILS;
     closeDb();
     delete process.env.DB_PATH;
   });
 
   it('GET /api/wechat/settings returns settings', async () => {
-    const res = await request(app).get('/api/wechat/settings');
+    const res = await request(app).get('/api/wechat/settings').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
-    expect(res.body.data).toBeNull();
+    expect(res.body.data.appSecretConfigured).toBe(false);
+    expect(res.body.data.oauthEnabled).toBe(false);
+    expect(res.body.data.massSendEnabled).toBe(false);
   });
 
   it('PUT /api/wechat/settings saves settings', async () => {
-    const res = await request(app).put('/api/wechat/settings').send({
+    const res = await request(app).put('/api/wechat/settings').set('Authorization', `Bearer ${token}`).send({
       appId: 'wx_test',
       appSecret: 'secret_test',
       previewOpenId: 'openid_test'
@@ -150,6 +158,15 @@ describe('Wechat Routes', () => {
 import { startSummaryPushScheduler, stopSummaryPushScheduler } from '../src/services/scheduler.js';
 
 describe('SummaryPushScheduler', () => {
+  beforeEach(() => {
+    process.env.DB_PATH = ':memory:';
+    getDb();
+  });
+  afterEach(() => {
+    stopSummaryPushScheduler();
+    closeDb();
+    delete process.env.DB_PATH;
+  });
   it('starts and stops without error', () => {
     expect(() => startSummaryPushScheduler()).not.toThrow();
     expect(() => stopSummaryPushScheduler()).not.toThrow();
