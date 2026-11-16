@@ -9,7 +9,7 @@ echo "  AI News Broadcasting - Dev Mode"
 echo "============================================"
 
 # Step 1: Install dependencies
-echo -e "\n[1/3] Installing dependencies..."
+printf "\n[1/3] Installing dependencies...\n"
 cd "$ROOT_DIR/backend"
 npm install >/dev/null 2>&1
 echo "  Backend dependencies ready"
@@ -19,16 +19,16 @@ npm install >/dev/null 2>&1
 echo "  Frontend dependencies ready"
 
 # Step 2: Start backend in background
-echo -e "\n[2/3] Starting backend server..."
+printf "\n[2/3] Starting backend server...\n"
 cd "$ROOT_DIR/backend"
-npm run dev &
+PORT=3001 npm run dev &
 BACKEND_PID=$!
 echo "  Backend starting on http://localhost:3001 (PID: $BACKEND_PID)"
 
 sleep 2
 
 # Step 3: Start frontend in background
-echo -e "\n[3/3] Starting frontend dev server..."
+printf "\n[3/3] Starting frontend dev server...\n"
 cd "$ROOT_DIR/frontend"
 npm run dev &
 FRONTEND_PID=$!

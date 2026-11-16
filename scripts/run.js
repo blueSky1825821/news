@@ -18,7 +18,8 @@ if (!command || (command !== 'deploy' && command !== 'dev')) {
 }
 
 const isWindows = os.platform() === 'win32';
-const scriptName = isWindows ? `${command}.ps1` : `${command}.sh`;
+const scriptPrefix = command === 'dev' ? 'start-dev' : command;
+const scriptName = isWindows ? `${scriptPrefix}.ps1` : `${scriptPrefix}.sh`;
 const scriptPath = path.join(__dirname, scriptName);
 
 console.log(`Platform: ${os.platform()}`);

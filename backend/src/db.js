@@ -2,11 +2,22 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function getDefaultDbPath() {
+  const projectDbPath = path.join(__dirname, '../../data/news.db');
+  // WSL + Windows-mounted drive (/mnt/...) + WAL mode = unreliable SQLite I/O.
+  // Use native WSL filesystem for dev/test to avoid disk I/O errors.
+  if (projectDbPath.startsWith('/mnt/') && process.env.NODE_ENV !== 'production') {
+    return path.join(os.homedir(), '.local/share/ai-news/news.db');
+  }
+  return projectDbPath;
+}
+
 export function createConnection() {
-  const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/news.db');
+  const DB_PATH = process.env.DB_PATH || getDefaultDbPath();
   const dbDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
