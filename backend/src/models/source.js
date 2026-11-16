@@ -15,18 +15,19 @@ export function getSourceById(id) {
   return db.prepare('SELECT * FROM sources WHERE id = ?').get(id) || null;
 }
 
-export function insertSource({ name, rssUrl, category, isActive = 1, fetchIntervalMinutes = 30 }) {
+export function insertSource({ name, rssUrl, category, type = 'rss', isActive = 1, fetchIntervalMinutes = 30 }) {
   const db = getDb();
   const stmt = db.prepare(`
-    INSERT INTO sources (name, rssUrl, category, isActive, fetchIntervalMinutes)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO sources (name, rssUrl, category, type, isActive, fetchIntervalMinutes)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(rssUrl) DO UPDATE SET
       name = excluded.name,
       category = excluded.category,
+      type = excluded.type,
       isActive = excluded.isActive,
       fetchIntervalMinutes = excluded.fetchIntervalMinutes
   `);
-  const result = stmt.run(name, rssUrl, category, isActive, fetchIntervalMinutes);
+  const result = stmt.run(name, rssUrl, category, type, isActive, fetchIntervalMinutes);
   return result.lastInsertRowid;
 }
 

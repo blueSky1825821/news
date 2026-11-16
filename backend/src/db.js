@@ -34,10 +34,13 @@ export function initSchema(db) {
       name TEXT NOT NULL,
       rssUrl TEXT NOT NULL UNIQUE,
       category TEXT,
+      type TEXT NOT NULL DEFAULT 'rss',
       isActive BOOLEAN NOT NULL DEFAULT 1,
       fetchIntervalMinutes INTEGER NOT NULL DEFAULT 30,
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type);
 
     CREATE TABLE IF NOT EXISTS articles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +51,7 @@ export function initSchema(db) {
       sourceId INTEGER NOT NULL,
       publishedAt DATETIME,
       fetchedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      transcript TEXT,
       isRead BOOLEAN NOT NULL DEFAULT 0,
       FOREIGN KEY (sourceId) REFERENCES sources(id)
     );
@@ -134,7 +138,33 @@ export function initSchema(db) {
       status TEXT NOT NULL DEFAULT 'draft',
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS xinwenlianbo_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskDate TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      audioFilePath TEXT,
+      transcript TEXT,
+      summary TEXT,
+      headlines TEXT,
+      startedAt DATETIME,
+      completedAt DATETIME,
+      errorMessage TEXT,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  // Migration: add columns to existing tables
+  const hasTypeColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('sources') WHERE name = 'type'`).get().count > 0;
+  if (!hasTypeColumn) {
+    db.exec(`ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'rss'`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type)`);
+  }
+
+  const hasTranscriptColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'transcript'`).get().count > 0;
+  if (!hasTranscriptColumn) {
+    db.exec(`ALTER TABLE articles ADD COLUMN transcript TEXT`);
+  }
 }
 
 let dbInstance = null;
