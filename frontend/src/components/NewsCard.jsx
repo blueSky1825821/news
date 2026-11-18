@@ -48,6 +48,11 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false })
             </button>}
           </div>
           <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+            {article.category === 'xinwenlianbo' && (
+              <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                📺 新闻联播
+              </span>
+            )}
             <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
               {article.sourceName}
             </span>

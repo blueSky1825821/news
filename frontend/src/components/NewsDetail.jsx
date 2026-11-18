@@ -194,6 +194,23 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
         </button>}
       </div>
 
+      {article.category === 'xinwenlianbo' && article.headlines && (
+        <div className="mb-4 rounded-lg bg-red-50 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-red-800">今日要闻</h3>
+          <ol className="list-decimal pl-5 text-sm text-red-700">
+            {(() => {
+              try {
+                return JSON.parse(article.headlines || '[]').map((h, i) => (
+                  <li key={i}>{h}</li>
+                ));
+              } catch {
+                return null;
+              }
+            })()}
+          </ol>
+        </div>
+      )}
+
       <div className="mt-6">
         {article.content ? (
           <div
@@ -215,6 +232,17 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
           </div>
         )}
       </div>
+
+      {article.category === 'xinwenlianbo' && article.transcript && (
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+            查看完整转录文字
+          </summary>
+          <div className="mt-2 max-h-96 overflow-y-auto rounded bg-gray-50 p-4 text-sm text-gray-600">
+            {article.transcript}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

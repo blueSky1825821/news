@@ -12,6 +12,8 @@ export default function SourceManager() {
   const [crawlingAll, setCrawlingAll] = useState(false);
   const [threshold, setThreshold] = useState(5);
   const [thresholdLoading, setThresholdLoading] = useState(false);
+  const [xwlbStatus, setXwlbStatus] = useState(null);
+  const [xwlbLoading, setXwlbLoading] = useState(false);
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -40,7 +42,17 @@ export default function SourceManager() {
   useEffect(() => {
     fetchHealth();
     fetchThreshold();
+    fetchXwlbStatus();
   }, []);
+
+  const fetchXwlbStatus = async () => {
+    try {
+      const data = await api.getXinwenlianboStatus();
+      setXwlbStatus(data);
+    } catch (err) {
+      console.error('加载新闻联播状态失败:', err);
+    }
+  };
 
   const handleActivate = async (id) => {
     setActivatingIds((prev) => new Set(prev).add(id));
@@ -114,6 +126,32 @@ export default function SourceManager() {
       alert('全部抓取失败：' + (err.message || '未知错误'));
     } finally {
       setCrawlingAll(false);
+    }
+  };
+
+  const handleTriggerXwlb = async () => {
+    setXwlbLoading(true);
+    try {
+      await api.triggerXinwenlianbo();
+      alert('新闻联播录制已触发');
+      fetchXwlbStatus();
+    } catch (err) {
+      alert('触发失败：' + err.message);
+    } finally {
+      setXwlbLoading(false);
+    }
+  };
+
+  const handleStopXwlb = async () => {
+    setXwlbLoading(true);
+    try {
+      await api.stopXinwenlianbo();
+      alert('录制已停止');
+      fetchXwlbStatus();
+    } catch (err) {
+      alert('停止失败：' + err.message);
+    } finally {
+      setXwlbLoading(false);
     }
   };
 
@@ -271,8 +309,35 @@ export default function SourceManager() {
               {sources.map((source) => (
                 <tr key={source.id} className={!source.isActive ? 'bg-red-50' : ''}>
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-gray-900">{source.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium text-gray-900">{source.name}</div>
+                      {source.type === 'xinwenlianbo' && (
+                        <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                          📺 新闻联播
+                        </span>
+                      )}
+                    </div>
                     <div className="max-w-xs truncate text-xs text-gray-500">{source.rssUrl}</div>
+                    {source.type === 'xinwenlianbo' && xwlbStatus && (
+                      <div className="mt-1 text-xs text-gray-500">
+                        今日状态：
+                        <span className={
+                          xwlbStatus.status === 'completed' ? 'text-green-600' :
+                          xwlbStatus.status === 'failed' ? 'text-red-600' :
+                          xwlbStatus.status === 'recording' ? 'text-blue-600 animate-pulse' :
+                          xwlbStatus.status === 'transcribing' ? 'text-purple-600 animate-pulse' :
+                          xwlbStatus.status === 'summarizing' ? 'text-orange-600 animate-pulse' :
+                          'text-gray-400'
+                        }>
+                          {xwlbStatus.status === 'completed' ? '已完成' :
+                           xwlbStatus.status === 'failed' ? '失败' :
+                           xwlbStatus.status === 'recording' ? '录制中' :
+                           xwlbStatus.status === 'transcribing' ? '转录中' :
+                           xwlbStatus.status === 'summarizing' ? '摘要中' :
+                           '待录制'}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {source.isActive ? (
@@ -304,13 +369,32 @@ export default function SourceManager() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => handleCrawl(source.id)}
-                        disabled={crawlingIds.has(source.id) || !source.isActive}
-                        className="rounded-md bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
-                      >
-                        {crawlingIds.has(source.id) ? '抓取中...' : '抓取'}
-                      </button>
+                      {source.type === 'xinwenlianbo' ? (
+                        <>
+                          <button
+                            onClick={handleTriggerXwlb}
+                            disabled={xwlbLoading || xwlbStatus?.status === 'recording' || xwlbStatus?.status === 'transcribing' || xwlbStatus?.status === 'summarizing'}
+                            className="rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 disabled:opacity-50"
+                          >
+                            {xwlbLoading ? '处理中...' : '手动录制'}
+                          </button>
+                          <button
+                            onClick={handleStopXwlb}
+                            disabled={xwlbLoading || xwlbStatus?.status !== 'recording'}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            停止
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleCrawl(source.id)}
+                          disabled={crawlingIds.has(source.id) || !source.isActive}
+                          className="rounded-md bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
+                        >
+                          {crawlingIds.has(source.id) ? '抓取中...' : '抓取'}
+                        </button>
+                      )}
                       {!source.isActive && (
                         <button
                           onClick={() => handleActivate(source.id)}

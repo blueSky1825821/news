@@ -173,5 +173,22 @@ export const api = {
 
   sendPreview() {
     return request('/api/wechat/preview', { method: 'POST' });
+  },
+
+  // Xinwenlianbo
+  getXinwenlianboStatus() {
+    return request('/api/xinwenlianbo/status');
+  },
+  triggerXinwenlianbo() {
+    return request('/api/xinwenlianbo/trigger', { method: 'POST' });
+  },
+  stopXinwenlianbo() {
+    return request('/api/xinwenlianbo/stop', { method: 'POST' });
+  },
+  getXinwenlianboTasks(page = 1) {
+    return request(`/api/xinwenlianbo/tasks?page=${page}`);
+  },
+  getXinwenlianboConfig() {
+    return request('/api/xinwenlianbo/config');
   }
 };
