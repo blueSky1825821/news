@@ -5,7 +5,7 @@ import { getWechatSettings } from '../models/wechatSettings.js';
 import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
 import { wechatCapabilities } from './wechatConfig.js';
-import { recordSuccess, recordFailure, deactivateSource } from '../models/sourceHealth.js';
+import { getHealth, recordSuccess, recordFailure, recordCooldown, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
 
@@ -96,13 +96,21 @@ export async function triggerManualCrawlForSource(sourceId) {
 }
 
 async function crawlWithHealth(source) {
+  const { retryAfterAt } = getHealth(source.id);
+  if (retryAfterAt > Date.now()) {
+    const seconds = Math.ceil((retryAfterAt - Date.now()) / 1_000);
+    throw new Error(`RSS 来源要求暂停抓取，请在 ${seconds} 秒后重试`);
+  }
+
   let articles;
   try {
     articles = await crawlSource(source);
   } catch (err) {
-    const { type, message } = classifyError(err);
+    const { type, message, cooldownMs } = classifyError(err);
     // Storage errors are operational failures, not evidence that the source is down.
-    if (type !== 'unknown' && getSourceById(source.id)) {
+    if (cooldownMs && getSourceById(source.id)) {
+      recordCooldown(source.id, message, Date.now() + cooldownMs);
+    } else if (type !== 'unknown' && getSourceById(source.id)) {
       recordFailure(source.id, message);
       const threshold = getFailureThreshold();
       if (deactivateSource(source.id, threshold)) {

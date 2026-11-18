@@ -114,6 +114,7 @@ export function initSchema(db) {
       consecutiveFailures INTEGER NOT NULL DEFAULT 0,
       lastError TEXT,
       lastErrorAt DATETIME,
+      retryAfterAt INTEGER,
       FOREIGN KEY (sourceId) REFERENCES sources(id) ON DELETE CASCADE
     );
 
@@ -166,6 +167,11 @@ export function initSchema(db) {
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type)`);
 
+
+  const hasRetryAfterAt = db.prepare("SELECT 1 FROM pragma_table_info('source_health') WHERE name = 'retryAfterAt'").get();
+  if (!hasRetryAfterAt) {
+    db.exec('ALTER TABLE source_health ADD COLUMN retryAfterAt INTEGER');
+  }
 
   const hasTranscriptColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'transcript'`).get().count > 0;
   if (!hasTranscriptColumn) {

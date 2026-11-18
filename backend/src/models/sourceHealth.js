@@ -4,7 +4,7 @@ import { getFailureThreshold } from './settings.js';
 export function getHealth(sourceId) {
   const db = getDb();
   const stmt = db.prepare('SELECT * FROM source_health WHERE sourceId = ?');
-  return stmt.get(sourceId) || { sourceId, consecutiveFailures: 0, lastError: null, lastErrorAt: null };
+  return stmt.get(sourceId) || { sourceId, consecutiveFailures: 0, lastError: null, lastErrorAt: null, retryAfterAt: null };
 }
 
 export function recordSuccess(sourceId) {
@@ -15,7 +15,8 @@ export function recordSuccess(sourceId) {
     ON CONFLICT(sourceId) DO UPDATE SET
       consecutiveFailures = 0,
       lastError = NULL,
-      lastErrorAt = NULL
+      lastErrorAt = NULL,
+      retryAfterAt = NULL
   `);
   stmt.run(sourceId);
 }
@@ -28,9 +29,21 @@ export function recordFailure(sourceId, errorMessage) {
     ON CONFLICT(sourceId) DO UPDATE SET
       consecutiveFailures = consecutiveFailures + 1,
       lastError = excluded.lastError,
-      lastErrorAt = CURRENT_TIMESTAMP
+      lastErrorAt = CURRENT_TIMESTAMP,
+      retryAfterAt = NULL
   `);
   stmt.run(sourceId, errorMessage?.slice(0, 500) || null);
+}
+
+export function recordCooldown(sourceId, errorMessage, retryAfterAt) {
+  getDb().prepare(`
+    INSERT INTO source_health (sourceId, lastError, lastErrorAt, retryAfterAt)
+    VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(sourceId) DO UPDATE SET
+      lastError = excluded.lastError,
+      lastErrorAt = excluded.lastErrorAt,
+      retryAfterAt = excluded.retryAfterAt
+  `).run(sourceId, errorMessage.slice(0, 500), retryAfterAt);
 }
 
 export function deactivateSource(sourceId, threshold = getFailureThreshold()) {

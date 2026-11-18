@@ -47,9 +47,10 @@ export function listArticles({ page = 1, limit = 20, sourceId, category } = {}) 
     conditions.push('a.sourceId = ?');
     params.push(sourceId);
   }
-  if (category) {
-    conditions.push('s.category = ?');
-    params.push(category);
+  const categories = Array.isArray(category) ? category : [category].filter(Boolean);
+  if (categories.length > 0) {
+    conditions.push(`s.category IN (${categories.map(() => '?').join(', ')})`);
+    params.push(...categories);
   }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';

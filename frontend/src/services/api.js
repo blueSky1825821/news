@@ -22,12 +22,12 @@ async function request(url, options = {}) {
 }
 
 export const api = {
-  getArticles(params = {}) {
+  getArticles(params = {}, options = {}) {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.sourceId) qs.set('sourceId', String(params.sourceId));
-    if (params.category) qs.set('category', params.category);
+    for (const category of [params.category].flat().filter(Boolean)) qs.append('category', category);
     const query = qs.toString();
     return request('/api/articles' + (query ? '?' + query : ''));
   },

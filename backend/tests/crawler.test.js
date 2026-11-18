@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { getDb, closeDb } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import { listArticles } from '../src/models/article.js';
+import { getHealth } from '../src/models/sourceHealth.js';
 import { crawlSource, crawlAllSources, normalizeArticle } from '../src/services/crawler.js';
 import { triggerManualCrawl, triggerManualCrawlForSource } from '../src/services/scheduler.js';
 
@@ -82,6 +83,37 @@ describe('Crawler', () => {
     fetch.mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '60' } }));
     await expect(crawlSource(getAllSources()[0])).rejects.toMatchObject({ type: 'http' });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Atom entries when a publication date is malformed', async () => {
+    addSource();
+    fetch.mockResolvedValueOnce(new Response(`
+      <feed xmlns="http://www.w3.org/2005/Atom"><title>Atom feed</title>
+        <entry><title>Fallback date</title><link href="https://example.org/first"/>
+          <published>invalid</published><updated>2026-11-18T12:00:00Z</updated></entry>
+        <entry><title>No date</title><link href="https://example.org/second"/>
+          <updated>invalid</updated></entry>
+      </feed>`));
+    await expect(crawlSource(getAllSources()[0])).resolves.toMatchObject([
+      { title: 'Fallback date', publishedAt: '2026-11-18T12:00:00.000Z' },
+      { title: 'No date', publishedAt: null }
+    ]);
+  });
+
+  it.each([429, 503])('persists HTTP %s cooldown without incrementing failures', async (status) => {
+    const id = addSource();
+    fetch.mockResolvedValueOnce(new Response(null, { status, headers: { 'Retry-After': '60' } }));
+    await expect(triggerManualCrawlForSource(id)).rejects.toThrow(`HTTP ${status}`);
+    expect(getHealth(id)).toMatchObject({ consecutiveFailures: 0, retryAfterAt: expect.any(Number) });
+
+    const [result] = await triggerManualCrawl();
+    expect(result.error).toContain('暂停抓取');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(getAllSources()[0].isActive).toBe(1);
+
+    getDb().prepare('UPDATE source_health SET retryAfterAt = ? WHERE sourceId = ?').run(Date.now() - 1, id);
+    await expect(triggerManualCrawlForSource(id)).resolves.toMatchObject({ count: 2 });
+    expect(getHealth(id)).toMatchObject({ consecutiveFailures: 0, lastError: null, retryAfterAt: null });
   });
 
   it('shares an overlapping batch and single-source request', async () => {

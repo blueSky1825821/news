@@ -8,7 +8,9 @@ router.get('/', (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const sourceId = req.query.sourceId ? parseInt(req.query.sourceId) : undefined;
-    const category = req.query.category || undefined;
+    const category = [req.query.category].flat()
+      .filter((value) => typeof value === 'string' && value.trim())
+      .slice(0, 30);
     const result = listArticles({ page, limit, sourceId, category });
     res.sendJson(0, 'success', result);
   } catch (err) {

@@ -14,6 +14,7 @@ import TodayNews from './components/TodayNews.jsx';
 import AutoPlayBar from './components/AutoPlayBar.jsx';
 import WechatLogin from './components/WechatLogin.jsx';
 import PushNews from './components/PushNews.jsx';
+import PortalNav from './components/PortalNav.jsx';
 import { api } from './services/api.js';
 
 function Navbar({ user, isLoading, onLogout }) {
@@ -53,6 +54,7 @@ function Navbar({ user, isLoading, onLogout }) {
         <div className="news-shell news-nav-links">
           <NavLink to="/" end>首页</NavLink>
           <NavLink to="/today">今日推送</NavLink>
+          <NavLink to="/portal">门户导航</NavLink>
           <NavLink to="/settings">设置</NavLink>
           {isAdmin && <NavLink to="/sources">来源管理</NavLink>}
           {isAdmin && <NavLink to="/wechat-settings">公众号后台</NavLink>}
@@ -137,6 +139,7 @@ export default function App() {
             path="/"
             element={
               <NewsList
+                user={user}
                 isAdmin={!isLoading && user?.role === 'admin'}
                 activeArticleId={activeArticleId}
                 onPlaySingle={handlePlaySingle}
@@ -165,6 +168,7 @@ export default function App() {
           <Route path="/wechat-login" element={<WechatLogin onLogin={wechatLogin} />} />
           <Route path="/push/:id" element={<PushNews user={user} isLoading={isLoading} />} />
           <Route path="/today" element={<TodayNews activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} />} />
+          <Route path="/portal" element={<PortalNav />} />
           <Route path="/login" element={<LoginForm onLogin={login} />} />
           <Route
             path="/register"

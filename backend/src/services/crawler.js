@@ -8,8 +8,22 @@ const MAX_FEED_BYTES = 5 * 1024 * 1024;
 const MAX_ATTEMPTS = 3;
 const MAX_RETRY_DELAY_MS = 5_000;
 const BATCH_CONCURRENCY = 3;
+const DEFAULT_RATE_LIMIT_DELAY_MS = 60_000;
 
-const parser = new Parser({ defaultRSS: 2 });
+class FeedParser extends Parser {
+  parseItemAtom(entry) {
+    // rss-parser converts Atom dates before returning items. One malformed date
+    // would otherwise reject the entire feed.
+    const item = { ...entry };
+    for (const field of ['published', 'updated']) {
+      const value = itemText(item[field]?.[0]);
+      item[field] = Number.isFinite(Date.parse(value)) ? [value] : [];
+    }
+    return super.parseItemAtom(item);
+  }
+}
+
+const parser = new FeedParser({ defaultRSS: 2 });
 const headers = {
   'User-Agent': 'NewsBroadcastingBot/1.0',
   Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.5',
@@ -17,11 +31,12 @@ const headers = {
 };
 
 class FeedError extends Error {
-  constructor(type, message, { cause, retryable = false, retryAfterMs = 0 } = {}) {
+  constructor(type, message, { cause, retryable = false, retryAfterMs = 0, cooldownMs = 0 } = {}) {
     super(message, { cause });
     this.type = type;
     this.retryable = retryable;
     this.retryAfterMs = retryAfterMs;
+    this.cooldownMs = cooldownMs;
   }
 }
 
@@ -44,7 +59,7 @@ function articleUrl(value, baseUrl) {
 }
 
 export function normalizeArticle(item, sourceId, baseUrl) {
-  const date = [item?.isoDate, item?.pubDate].map(itemText).map(Date.parse).find(Number.isFinite);
+  const date = [item?.isoDate, item?.pubDate, item?.date].map(itemText).map(Date.parse).find(Number.isFinite);
   return {
     title: itemText(item?.title),
     summary: itemText(item?.contentSnippet) || itemText(item?.summary) || itemText(item?.description),
@@ -58,7 +73,8 @@ export function normalizeArticle(item, sourceId, baseUrl) {
 export function classifyError(err) {
   return {
     type: err instanceof FeedError ? err.type : 'unknown',
-    message: err instanceof Error ? err.message : String(err)
+    message: err instanceof Error ? err.message : String(err),
+    cooldownMs: err instanceof FeedError ? err.cooldownMs : 0
   };
 }
 
@@ -98,9 +114,13 @@ async function fetchFeed(url) {
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
       const { status } = response;
+      const retryAfter = retryAfterMs(response.headers.get('retry-after'));
+      const cooldownMs = status === 429 ? retryAfter || DEFAULT_RATE_LIMIT_DELAY_MS
+        : status === 503 ? retryAfter : 0;
       throw new FeedError('http', `RSS 请求失败（HTTP ${status}）`, {
         retryable: status === 408 || status === 429 || status >= 500,
-        retryAfterMs: retryAfterMs(response.headers.get('retry-after'))
+        retryAfterMs: cooldownMs || retryAfter,
+        cooldownMs
       });
     }
     document = await readFeedBody(response);
