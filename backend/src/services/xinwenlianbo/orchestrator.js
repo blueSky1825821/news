@@ -128,7 +128,7 @@ export async function runXinwenlianboTask(date) {
 
     db.prepare(`
       UPDATE xinwenlianbo_tasks
-      SET status = 'completed', summary = ?, headlines = ?, completedAt = datetime('now')
+      SET status = 'completed', summary = ?, headlines = ?, errorMessage = NULL, completedAt = datetime('now')
       WHERE taskDate = ?
     `).run(summary, headlines, date);
 
