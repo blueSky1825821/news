@@ -94,7 +94,7 @@ export async function runXinwenlianboTask(date) {
       title: `${date} 新闻联播摘要`,
       summary,
       content: summary,
-      originalUrl: config.audioUrl,
+      originalUrl: `${config.audioUrl}?date=${date}`,
       sourceId,
       publishedAt: new Date().toISOString(),
       transcript
@@ -120,6 +120,9 @@ export async function runXinwenlianboTask(date) {
       SET status = 'failed', errorMessage = ?
       WHERE taskDate = ?
     `).run(err.message, date);
+    if (!config.keepAudio && fs.existsSync(audioPath)) {
+      try { fs.unlinkSync(audioPath); } catch (e) {}
+    }
     throw err;
   }
 }

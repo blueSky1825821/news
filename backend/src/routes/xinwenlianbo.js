@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
+import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 import { triggerManualXinwenlianbo, stopXinwenlianboRecording } from '../services/scheduler.js';
 
 const router = Router();
 
+router.use(authMiddleware, adminMiddleware);
+
+function getTodayDate() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+}
+
 router.get('/status', (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDate();
     const db = getDb();
     const task = db.prepare('SELECT * FROM xinwenlianbo_tasks WHERE taskDate = ?').get(today);
 
@@ -29,12 +36,17 @@ router.get('/status', (req, res, next) => {
 
 router.post('/trigger', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDate();
     const db = getDb();
     const existing = db.prepare('SELECT status FROM xinwenlianbo_tasks WHERE taskDate = ?').get(today);
 
     if (existing?.status === 'completed' && !req.query.force) {
       res.sendJson(1002, "Today's task already completed. Use force=true to re-record.", null);
+      return;
+    }
+
+    if (existing && ['recording', 'transcribing', 'summarizing'].includes(existing.status)) {
+      res.sendJson(1003, "Today's task is already in progress.", null);
       return;
     }
 
@@ -49,7 +61,7 @@ router.post('/stop', (req, res, next) => {
   try {
     const stopped = stopXinwenlianboRecording();
     if (stopped) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getTodayDate();
       const db = getDb();
       db.prepare("UPDATE xinwenlianbo_tasks SET status = 'failed', errorMessage = 'Stopped by user' WHERE taskDate = ? AND status = 'recording'").run(today);
       res.sendJson(0, 'Recording stopped', { taskDate: today, status: 'failed' });

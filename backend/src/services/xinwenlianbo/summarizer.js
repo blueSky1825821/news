@@ -7,6 +7,9 @@ export async function summarize(transcript, config) {
 转录文字：
 ${transcript}`;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
   const response = await fetch(config.apiUrl, {
     method: 'POST',
     headers: {
@@ -17,8 +20,11 @@ ${transcript}`;
       model: config.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3
-    })
+    }),
+    signal: controller.signal
   });
+
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
