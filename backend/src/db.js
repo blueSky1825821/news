@@ -9,8 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function getDefaultDbPath() {
   const projectDbPath = path.join(__dirname, '../../data/news.db');
   // WSL + Windows-mounted drive (/mnt/...) + WAL mode = unreliable SQLite I/O.
-  // Use native WSL filesystem for dev/test to avoid disk I/O errors.
-  if (projectDbPath.startsWith('/mnt/') && process.env.NODE_ENV !== 'production') {
+  // Always use native WSL filesystem to avoid disk I/O errors and corruption.
+  if (projectDbPath.startsWith('/mnt/')) {
     return path.join(os.homedir(), '.local/share/ai-news/news.db');
   }
   return projectDbPath;
@@ -39,8 +39,6 @@ export function initSchema(db) {
       fetchIntervalMinutes INTEGER NOT NULL DEFAULT 30,
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type);
 
     CREATE TABLE IF NOT EXISTS articles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,8 +156,8 @@ export function initSchema(db) {
   const hasTypeColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('sources') WHERE name = 'type'`).get().count > 0;
   if (!hasTypeColumn) {
     db.exec(`ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'rss'`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type)`);
   }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type)`);
 
   const hasTranscriptColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'transcript'`).get().count > 0;
   if (!hasTranscriptColumn) {
