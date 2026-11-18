@@ -2,23 +2,31 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { getDb } from '../../db.js';
+import { getSetting } from '../../models/settings.js';
 import { startRecording, stopRecording } from './recorder.js';
 import { transcribe } from './transcriber.js';
 import { summarize } from './summarizer.js';
 import { insertArticle } from '../../models/article.js';
 
+function getConfigValue(key, envName, defaultValue = null) {
+  const envValue = process.env[envName];
+  if (envValue !== undefined && envValue !== '') return envValue;
+  const dbValue = getSetting(`xwlb_${key}`);
+  return dbValue !== null ? dbValue : defaultValue;
+}
+
 function getXinwenlianboConfig() {
   return {
-    enabled: process.env.XINWENLIANBO_ENABLED !== 'false',
-    audioUrl: process.env.XINWENLIANBO_AUDIO_URL || 'https://piccpndali.v.myalicdn.com/audio/cctv1_2.m3u8',
-    durationMinutes: parseInt(process.env.XINWENLIANBO_DURATION_MINUTES, 10) || 30,
-    whisperExecutable: process.env.WHISPER_EXECUTABLE,
-    whisperModelPath: process.env.WHISPER_MODEL_PATH,
-    llmProvider: process.env.LLM_PROVIDER || 'deepseek',
-    llmApiUrl: process.env.LLM_API_URL,
-    llmApiKey: process.env.LLM_API_KEY,
-    llmModel: process.env.LLM_MODEL || 'deepseek-chat',
-    keepAudio: process.env.XINWENLIANBO_KEEP_AUDIO === 'true'
+    enabled: getConfigValue('enabled', 'XINWENLIANBO_ENABLED', 'true') !== 'false',
+    audioUrl: getConfigValue('audioUrl', 'XINWENLIANBO_AUDIO_URL', 'https://piccpndali.v.myalicdn.com/audio/cctv1_2.m3u8'),
+    durationMinutes: parseInt(getConfigValue('durationMinutes', 'XINWENLIANBO_DURATION_MINUTES', '30'), 10),
+    whisperExecutable: getConfigValue('whisperExecutable', 'WHISPER_EXECUTABLE'),
+    whisperModelPath: getConfigValue('whisperModelPath', 'WHISPER_MODEL_PATH'),
+    llmProvider: getConfigValue('llmProvider', 'LLM_PROVIDER', 'deepseek'),
+    llmApiUrl: getConfigValue('llmApiUrl', 'LLM_API_URL'),
+    llmApiKey: getConfigValue('llmApiKey', 'LLM_API_KEY'),
+    llmModel: getConfigValue('llmModel', 'LLM_MODEL', 'deepseek-chat'),
+    keepAudio: getConfigValue('keepAudio', 'XINWENLIANBO_KEEP_AUDIO', 'false') === 'true'
   };
 }
 
@@ -39,6 +47,23 @@ export async function runXinwenlianboTask(date) {
 
   const tmpDir = process.env.TMPDIR || os.tmpdir();
   const audioPath = path.join(tmpDir, `xinwenlianbo-${date}.wav`);
+
+  // Disk space check (need at least 500MB)
+  try {
+    const stats = fs.statSync(tmpDir);
+    // statSync doesn't give free space directly; for a rough check we can try writing a test
+    // On Linux we could parse `df`, but a simpler approach is to just proceed and let ffmpeg fail
+    // if disk is full. However, let's add a best-effort check.
+    const { execSync } = await import('child_process');
+    const dfOutput = execSync(`df -B1 "${tmpDir}" | tail -1`, { encoding: 'utf-8' }).trim();
+    const freeBytes = parseInt(dfOutput.split(/\s+/)[3], 10);
+    if (freeBytes < 500 * 1024 * 1024) {
+      throw new Error(`磁盘空间不足：仅剩 ${Math.round(freeBytes / 1024 / 1024)}MB，需要至少 500MB`);
+    }
+  } catch (e) {
+    if (e.message.includes('磁盘空间不足')) throw e;
+    // If df fails, skip the check and proceed
+  }
 
   db.prepare(`
     INSERT INTO xinwenlianbo_tasks (taskDate, status, audioFilePath, startedAt)
@@ -97,7 +122,8 @@ export async function runXinwenlianboTask(date) {
       originalUrl: `${config.audioUrl}?date=${date}`,
       sourceId,
       publishedAt: new Date().toISOString(),
-      transcript
+      transcript,
+      headlines
     });
 
     db.prepare(`

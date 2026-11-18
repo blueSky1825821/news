@@ -20,6 +20,14 @@ process.on('unhandledRejection', (reason, promise) => {
 
 getDb();
 seedSources();
+
+// Recover orphaned xinwenlianbo tasks from previous crash
+const db = getDb();
+const orphaned = db.prepare(`UPDATE xinwenlianbo_tasks SET status = 'failed', errorMessage = 'Service interrupted' WHERE status IN ('recording', 'transcribing', 'summarizing')`).run();
+if (orphaned.changes > 0) {
+  console.log(`[Xinwenlianbo] Recovered ${orphaned.changes} orphaned task(s) from previous crash.`);
+}
+
 startScheduler();
 startSummaryPushScheduler();
 startCleanupScheduler();

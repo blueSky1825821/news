@@ -50,12 +50,19 @@ export function initSchema(db) {
       publishedAt DATETIME,
       fetchedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       transcript TEXT,
+      headlines TEXT,
       isRead BOOLEAN NOT NULL DEFAULT 0,
       FOREIGN KEY (sourceId) REFERENCES sources(id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_articles_sourceId ON articles(sourceId);
     CREATE INDEX IF NOT EXISTS idx_articles_publishedAt ON articles(publishedAt DESC);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
 
     CREATE TABLE IF NOT EXISTS wechat_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -162,6 +169,11 @@ export function initSchema(db) {
   const hasTranscriptColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'transcript'`).get().count > 0;
   if (!hasTranscriptColumn) {
     db.exec(`ALTER TABLE articles ADD COLUMN transcript TEXT`);
+  }
+
+  const hasHeadlinesColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'headlines'`).get().count > 0;
+  if (!hasHeadlinesColumn) {
+    db.exec(`ALTER TABLE articles ADD COLUMN headlines TEXT`);
   }
 }
 

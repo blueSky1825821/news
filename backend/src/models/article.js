@@ -1,12 +1,12 @@
 import { getDb } from '../db.js';
 
-export function insertArticle({ title, summary, content, originalUrl, sourceId, publishedAt, transcript }) {
+export function insertArticle({ title, summary, content, originalUrl, sourceId, publishedAt, transcript, headlines }) {
   const db = getDb();
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO articles (title, summary, content, originalUrl, sourceId, publishedAt, transcript)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO articles (title, summary, content, originalUrl, sourceId, publishedAt, transcript, headlines)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const result = stmt.run(title, summary || null, content || null, originalUrl, sourceId, publishedAt || null, transcript || null);
+  const result = stmt.run(title, summary || null, content || null, originalUrl, sourceId, publishedAt || null, transcript || null, headlines || null);
   return result.lastInsertRowid || null;
 }
 

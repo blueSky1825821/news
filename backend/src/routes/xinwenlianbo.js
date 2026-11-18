@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
+import { getSetting, setSetting } from '../models/settings.js';
 import { triggerManualXinwenlianbo, stopXinwenlianboRecording } from '../services/scheduler.js';
 
 const router = Router();
@@ -96,13 +97,38 @@ router.get('/tasks', (req, res, next) => {
 
 router.get('/config', (req, res, next) => {
   try {
+    const envOrDb = (key, envName) => {
+      const envValue = process.env[envName];
+      if (envValue !== undefined && envValue !== '') return envValue;
+      return getSetting(`xwlb_${key}`);
+    };
     res.sendJson(0, 'success', {
-      enabled: process.env.XINWENLIANBO_ENABLED !== 'false',
-      audioUrl: process.env.XINWENLIANBO_AUDIO_URL,
-      durationMinutes: parseInt(process.env.XINWENLIANBO_DURATION_MINUTES, 10) || 30,
-      llmProvider: process.env.LLM_PROVIDER,
-      llmModel: process.env.LLM_MODEL
+      enabled: (envOrDb('enabled', 'XINWENLIANBO_ENABLED') || 'true') !== 'false',
+      audioUrl: envOrDb('audioUrl', 'XINWENLIANBO_AUDIO_URL'),
+      durationMinutes: parseInt(envOrDb('durationMinutes', 'XINWENLIANBO_DURATION_MINUTES') || '30', 10),
+      llmProvider: envOrDb('llmProvider', 'LLM_PROVIDER'),
+      llmModel: envOrDb('llmModel', 'LLM_MODEL'),
+      whisperExecutable: envOrDb('whisperExecutable', 'WHISPER_EXECUTABLE'),
+      whisperModelPath: envOrDb('whisperModelPath', 'WHISPER_MODEL_PATH')
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/config', (req, res, next) => {
+  try {
+    const { audioUrl, durationMinutes, llmProvider, llmModel, llmApiUrl, llmApiKey, llmModelName, whisperExecutable, whisperModelPath } = req.body;
+    if (audioUrl !== undefined) setSetting('xwlb_audioUrl', audioUrl);
+    if (durationMinutes !== undefined) setSetting('xwlb_durationMinutes', String(durationMinutes));
+    if (llmProvider !== undefined) setSetting('xwlb_llmProvider', llmProvider);
+    if (llmModel !== undefined) setSetting('xwlb_llmModel', llmModel);
+    if (llmApiUrl !== undefined) setSetting('xwlb_llmApiUrl', llmApiUrl);
+    if (llmApiKey !== undefined) setSetting('xwlb_llmApiKey', llmApiKey);
+    if (llmModelName !== undefined) setSetting('xwlb_llmModel', llmModelName);
+    if (whisperExecutable !== undefined) setSetting('xwlb_whisperExecutable', whisperExecutable);
+    if (whisperModelPath !== undefined) setSetting('xwlb_whisperModelPath', whisperModelPath);
+    res.sendJson(0, 'Config saved', null);
   } catch (err) {
     next(err);
   }

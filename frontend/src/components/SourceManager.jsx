@@ -54,6 +54,15 @@ export default function SourceManager() {
     }
   };
 
+  // Auto-refresh xinwenlianbo status when task is in progress
+  useEffect(() => {
+    if (!xwlbStatus) return;
+    if (['recording', 'transcribing', 'summarizing'].includes(xwlbStatus.status)) {
+      const interval = setInterval(fetchXwlbStatus, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [xwlbStatus?.status]);
+
   const handleActivate = async (id) => {
     setActivatingIds((prev) => new Set(prev).add(id));
     try {
