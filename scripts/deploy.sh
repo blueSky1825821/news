@@ -8,29 +8,38 @@ echo "============================================"
 echo "  AI News Broadcasting - Deploy"
 echo "============================================"
 
-# Step 1: Build frontend
-printf "\n[1/4] Building frontend...\n"
+# Step 1: Install xinwenlianbo system dependencies (ffmpeg + whisper.cpp)
+printf "\n[1/5] Checking xinwenlianbo dependencies...\n"
+if command -v ffmpeg &>/dev/null && [ -f "/opt/whisper.cpp/build/bin/whisper-cli" ]; then
+    echo "  Dependencies already installed"
+else
+    echo "  Running dependency installer..."
+    bash "$SCRIPT_DIR/install-xinwenlianbo-deps.sh"
+fi
+
+# Step 2: Build frontend
+printf "\n[2/5] Building frontend...\n"
 cd "$ROOT_DIR/frontend"
 npm install
 npm run build
 echo "  Frontend built successfully"
 
-# Step 2: Install backend dependencies
-printf "\n[2/4] Installing backend dependencies...\n"
+# Step 3: Install backend dependencies
+printf "\n[3/5] Installing backend dependencies...\n"
 cd "$ROOT_DIR/backend"
 npm install --omit=dev
 echo "  Backend dependencies installed"
 
-# Step 3: Verify dist exists
-printf "\n[3/4] Verifying build output...\n"
+# Step 4: Verify dist exists
+printf "\n[4/5] Verifying build output...\n"
 if [ ! -f "$ROOT_DIR/frontend/dist/index.html" ]; then
     echo "  Build output not found at $ROOT_DIR/frontend/dist/index.html"
     exit 1
 fi
 echo "  Build output verified"
 
-# Step 4: Start server
-printf "\n[4/4] Starting server...\n"
+# Step 5: Start server
+printf "\n[5/5] Starting server...\n"
 export NODE_ENV=production
 printf "\nServer starting on http://0.0.0.0:3000\n"
 printf "Access via: http://<your-ip>:3000\n"
