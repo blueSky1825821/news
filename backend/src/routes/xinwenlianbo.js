@@ -5,6 +5,7 @@ import { getSetting, setSetting } from '../models/settings.js';
 import { triggerManualXinwenlianbo, stopXinwenlianboRecording } from '../services/scheduler.js';
 
 const router = Router();
+let manualTask = null;
 
 router.use(authMiddleware, adminMiddleware);
 
@@ -35,8 +36,14 @@ router.get('/status', (req, res, next) => {
   }
 });
 
-router.post('/trigger', async (req, res, next) => {
+router.post('/trigger', (req, res, next) => {
   try {
+    const enabled = process.env.XINWENLIANBO_ENABLED || getSetting('xwlb_enabled');
+    if (enabled === 'false') {
+      res.sendJson(1004, 'Xinwenlianbo recording is disabled.', null);
+      return;
+    }
+
     const today = getTodayDate();
     const db = getDb();
     const existing = db.prepare('SELECT status FROM xinwenlianbo_tasks WHERE taskDate = ?').get(today);
@@ -46,13 +53,22 @@ router.post('/trigger', async (req, res, next) => {
       return;
     }
 
-    if (existing && ['recording', 'transcribing', 'summarizing'].includes(existing.status)) {
+    if (manualTask || ['recording', 'transcribing', 'summarizing'].includes(existing?.status)) {
       res.sendJson(1003, "Today's task is already in progress.", null);
       return;
     }
 
-    const result = await triggerManualXinwenlianbo();
-    res.sendJson(0, 'Task started', { taskDate: today, status: result?.status || 'recording' });
+    manualTask = triggerManualXinwenlianbo(today)
+      .catch((err) => {
+        console.error('[Xinwenlianbo] Manual task failed:', err.message);
+        db.prepare(`
+          INSERT INTO xinwenlianbo_tasks (taskDate, status, errorMessage) VALUES (?, 'failed', ?)
+          ON CONFLICT(taskDate) DO UPDATE SET status = 'failed', errorMessage = excluded.errorMessage
+        `).run(today, err.message);
+      })
+      .finally(() => { manualTask = null; })
+      .catch((err) => console.error('[Xinwenlianbo] Unable to save task failure:', err.message));
+    res.sendJson(0, 'Task started', { taskDate: today, status: 'recording' });
   } catch (err) {
     next(err);
   }

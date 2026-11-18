@@ -7,7 +7,7 @@ export function insertArticle({ title, summary, content, originalUrl, sourceId, 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const result = stmt.run(title, summary || null, content || null, originalUrl, sourceId, publishedAt || null, transcript || null, headlines || null);
-  return result.lastInsertRowid || null;
+  return result.changes > 0 ? result.lastInsertRowid : null;
 }
 
 export function getArticleById(id) {

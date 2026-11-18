@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 
-export default function NewsCard({ article, isActive, onPlay, isAdmin = false }) {
+export default function NewsCard({ article, isActive, onPlay, isAdmin = false, variant = 'standard' }) {
   const [isFlagged, setIsFlagged] = useState(false);
 
   useEffect(() => {
@@ -24,52 +24,37 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false })
   };
 
   return (
-    <div
-      className={`
-        rounded-lg border p-4 shadow-sm transition-colors
-        ${isActive ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}
-      `}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center">
-            <Link
-              to={`/article/${article.id}`}
-              className="text-lg font-semibold text-gray-900 hover:text-blue-600"
-            >
-              {article.title}
-            </Link>
-            {isAdmin && <button
-              onClick={handleToggleFlag}
-              className="ml-2 text-lg focus:outline-none"
-              title={isFlagged ? '取消标记' : '标记为重要'}
-            >
-              {isFlagged ? '★' : '☆'}
-            </button>}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-            {article.category === 'xinwenlianbo' && (
-              <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-                📺 新闻联播
-              </span>
-            )}
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-              {article.sourceName}
-            </span>
-            <span>{article.publishedAt ? new Date(article.publishedAt).toLocaleString('zh-CN') : ''}</span>
-          </div>
-          <p className="mt-2 text-sm text-gray-600 line-clamp-2">
-            {article.summary || ''}
-          </p>
-        </div>
-        <button
-          onClick={() => onPlay && onPlay(article)}
-          className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          aria-label="播报"
-        >
-          播报
-        </button>
+    <article className={`news-story news-story--${variant}${isActive ? ' is-playing' : ''}`}>
+      <div className="news-story-meta">
+        <span className="news-story-source">{article.sourceName}</span>
+        {article.publishedAt && (
+          <time dateTime={article.publishedAt}>
+            {new Date(article.publishedAt).toLocaleString('zh-CN', {
+              month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            })}
+          </time>
+        )}
       </div>
-    </div>
+      <div className="news-story-heading">
+        <h3><Link to={`/article/${article.id}`}>{article.title}</Link></h3>
+        {isAdmin && (
+          <button
+            onClick={handleToggleFlag}
+            className="news-story-flag"
+            title={isFlagged ? '取消标记' : '标记为重要'}
+            aria-label={isFlagged ? '取消标记' : '标记为重要'}
+            aria-pressed={isFlagged}
+          >
+            {isFlagged ? '★' : '☆'}
+          </button>
+        )}
+      </div>
+      {variant !== 'brief' && article.summary && <p className="news-story-summary">{article.summary}</p>}
+      {onPlay && (
+        <button onClick={() => onPlay(article)} className="news-listen" aria-label={`播报 ${article.title}`}>
+          <span aria-hidden="true">▶</span> {isActive ? '播放中' : '播报'}
+        </button>
+      )}
+    </article>
   );
 }

@@ -1,6 +1,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { getDb } from '../../db.js';
 import { getSetting } from '../../models/settings.js';
 import { startRecording, stopRecording } from './recorder.js';
@@ -45,6 +46,10 @@ export async function runXinwenlianboTask(date) {
     return { skipped: true, reason: 'already_completed' };
   }
 
+  if (['recording', 'transcribing', 'summarizing'].includes(existing?.status)) {
+    return { skipped: true, reason: 'already_in_progress' };
+  }
+
   const tmpDir = process.env.TMPDIR || os.tmpdir();
   const audioPath = path.join(tmpDir, `xinwenlianbo-${date}.wav`);
 
@@ -54,7 +59,6 @@ export async function runXinwenlianboTask(date) {
     // statSync doesn't give free space directly; for a rough check we can try writing a test
     // On Linux we could parse `df`, but a simpler approach is to just proceed and let ffmpeg fail
     // if disk is full. However, let's add a best-effort check.
-    const { execSync } = await import('child_process');
     const dfOutput = execSync(`df -B1 "${tmpDir}" | tail -1`, { encoding: 'utf-8' }).trim();
     const freeBytes = parseInt(dfOutput.split(/\s+/)[3], 10);
     if (freeBytes < 500 * 1024 * 1024) {

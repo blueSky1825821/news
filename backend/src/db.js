@@ -166,6 +166,7 @@ export function initSchema(db) {
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_type ON sources(type)`);
 
+
   const hasTranscriptColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'transcript'`).get().count > 0;
   if (!hasTranscriptColumn) {
     db.exec(`ALTER TABLE articles ADD COLUMN transcript TEXT`);

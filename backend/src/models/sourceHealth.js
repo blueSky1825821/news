@@ -53,7 +53,11 @@ export function reactivateSource(sourceId) {
   const result = activateStmt.run(sourceId);
 
   if (result.changes > 0) {
-    recordSuccess(sourceId);
+    db.prepare(`
+      UPDATE source_health
+      SET consecutiveFailures = 0, lastError = NULL, lastErrorAt = NULL
+      WHERE sourceId = ?
+    `).run(sourceId);
     return true;
   }
   return false;
@@ -62,9 +66,11 @@ export function reactivateSource(sourceId) {
 export function listHealth() {
   const db = getDb();
   const stmt = db.prepare(`
-    SELECT s.id, s.name, s.rssUrl, s.isActive, s.category,
+    SELECT s.id, s.name, s.rssUrl, s.isActive, s.category, s.type,
            COALESCE(h.consecutiveFailures, 0) AS consecutiveFailures,
-           h.lastError, h.lastErrorAt
+           h.lastError, h.lastErrorAt,
+           (SELECT MAX(strftime('%Y-%m-%dT%H:%M:%fZ', a.publishedAt))
+            FROM articles a WHERE a.sourceId = s.id) AS latestArticleAt
     FROM sources s
     LEFT JOIN source_health h ON s.id = h.sourceId
     ORDER BY s.id

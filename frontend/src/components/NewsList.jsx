@@ -9,10 +9,12 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, isA
   const [sources, setSources] = useState([]);
   const [selectedSourceId, setSelectedSourceId] = useState(undefined);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [triggering, setTriggering] = useState(false);
 
   const fetchData = async (page = 1, sourceId) => {
     setLoading(true);
+    setError('');
     try {
       const [articlesRes, sourcesRes] = await Promise.all([
         api.getArticles({ page, limit: 20, sourceId }),
@@ -22,7 +24,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, isA
       setPagination(articlesRes.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 });
       setSources(sourcesRes || []);
     } catch (err) {
-      console.error(err);
+      setError(err.message || '加载失败');
     } finally {
       setLoading(false);
     }
@@ -38,15 +40,16 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, isA
 
   const handlePageChange = (page) => {
     fetchData(page, selectedSourceId);
+    window.scrollTo(0, 0);
   };
 
   const handleTriggerCrawl = async () => {
     setTriggering(true);
     try {
       await api.triggerCrawl();
-      setTimeout(() => fetchData(1, selectedSourceId), 3000);
+      await fetchData(1, selectedSourceId);
     } catch (err) {
-      console.error(err);
+      setError(err.message || '抓取失败');
     } finally {
       setTriggering(false);
     }
@@ -54,72 +57,81 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, isA
 
   const textsForPlayAll = articles.map((a) => `${a.title}。${a.summary || ''}`);
 
+  const showHeadlines = pagination.page === 1 && !selectedSourceId && articles.length >= 4;
+  const [lead, ...briefs] = showHeadlines ? articles.slice(0, 4) : [];
+  const latest = showHeadlines ? articles.slice(4) : articles;
+  const renderStory = (article, variant) => (
+    <NewsCard
+      key={article.id}
+      article={article}
+      isAdmin={isAdmin}
+      isActive={activeArticleId === article.id}
+      variant={variant}
+      onPlay={onPlaySingle && ((a) => onPlaySingle(a, `${a.title}。${a.summary || ''}`))}
+    />
+  );
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">新闻头条播报</h1>
-        <div className="flex items-center gap-3">
-          <SourceFilter
-            sources={sources}
-            selectedId={selectedSourceId}
-            onChange={handleSourceChange}
-          />
+    <div aria-busy={loading}>
+      <header className="news-section-header">
+        <h1>{showHeadlines ? '头条新闻' : '新闻快讯'}</h1>
+        <div className="news-toolbar">
+          <SourceFilter sources={sources} selectedId={selectedSourceId} onChange={handleSourceChange} />
           <button
-            onClick={() => onPlayAll && onPlayAll(articles, textsForPlayAll)}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={() => onPlayAll?.(articles, textsForPlayAll)}
+            disabled={loading || articles.length === 0}
+            className="news-primary"
           >
-            全部播报
+            <span aria-hidden="true">▶</span> 全部播报
           </button>
         </div>
-      </div>
+      </header>
 
       {loading ? (
-        <div className="py-12 text-center text-gray-500">加载中...</div>
+        <div className="news-message" role="status">加载中…</div>
+      ) : error ? (
+        <div className="news-message" role="alert">
+          <p>{error}</p>
+          <button className="news-listen" onClick={() => fetchData(pagination.page, selectedSourceId)}>重试</button>
+        </div>
       ) : articles.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-          <p className="text-gray-600">暂无新闻，请等待首次抓取完成</p>
-          {isAdmin && <button
-            onClick={handleTriggerCrawl}
-            disabled={triggering}
-            className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {triggering ? '触发中...' : '立即触发抓取'}
-          </button>}
+        <div className="news-message">
+          <p>{selectedSourceId ? '该来源暂无新闻' : '暂无新闻，请等待首次抓取完成'}</p>
+          {isAdmin && (
+            <button onClick={handleTriggerCrawl} disabled={triggering} className="news-primary mt-4">
+              {triggering ? '抓取中…' : '立即抓取'}
+            </button>
+          )}
         </div>
       ) : (
         <>
-          <div className="space-y-4">
-            {articles.map((article) => (
-              <NewsCard
-                isAdmin={isAdmin}
-                key={article.id}
-                article={article}
-                isActive={activeArticleId === article.id}
-                onPlay={(a) => onPlaySingle && onPlaySingle(a, `${a.title}。${a.summary || ''}`)}
-              />
-            ))}
-          </div>
+          {lead && (
+            <div className="news-headlines">
+              <section aria-label="首条新闻">{renderStory(lead, 'lead')}</section>
+              <section className="news-briefs" aria-labelledby="more-headlines">
+                <h2 id="more-headlines">更多头条</h2>
+                {briefs.map((article) => renderStory(article, 'brief'))}
+              </section>
+            </div>
+          )}
+
+          {latest.length > 0 && (
+            <section className="news-feed" aria-label="新闻列表">
+              {lead && <h2>最新消息</h2>}
+              {latest.map((article) => renderStory(article))}
+            </section>
+          )}
 
           {pagination.totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page <= 1}
-                className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-              >
+            <nav className="news-pagination" aria-label="新闻分页">
+              <button className="news-listen" onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page <= 1}>
                 上一页
               </button>
-              <span className="text-sm text-gray-600">
-                {pagination.page} / {pagination.totalPages}
-              </span>
-              <button
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page >= pagination.totalPages}
-                className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-              >
+              <span>{pagination.page} / {pagination.totalPages}</span>
+              <button className="news-listen" onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}>
                 下一页
               </button>
-            </div>
+            </nav>
           )}
         </>
       )}

@@ -2,6 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 
+function formatHealthTime(value) {
+  return value ? new Date(value).toLocaleString('zh-CN') : '—';
+}
+
 export default function SourceManager() {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +46,14 @@ export default function SourceManager() {
   useEffect(() => {
     fetchHealth();
     fetchThreshold();
-    fetchXwlbStatus();
+    fetchXwlbStatus(false);
   }, []);
 
-  const fetchXwlbStatus = async () => {
+  const fetchXwlbStatus = async (refreshOnCompletion = true) => {
     try {
       const data = await api.getXinwenlianboStatus();
       setXwlbStatus(data);
+      if (refreshOnCompletion && data?.status === 'completed') await fetchHealth();
     } catch (err) {
       console.error('加载新闻联播状态失败:', err);
     }
@@ -107,6 +112,7 @@ export default function SourceManager() {
     } catch (err) {
       alert('抓取失败：' + err.message);
     } finally {
+      await fetchHealth();
       setCrawlingIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -134,6 +140,7 @@ export default function SourceManager() {
     } catch (err) {
       alert('全部抓取失败：' + (err.message || '未知错误'));
     } finally {
+      await fetchHealth();
       setCrawlingAll(false);
     }
   };
@@ -141,9 +148,8 @@ export default function SourceManager() {
   const handleTriggerXwlb = async () => {
     setXwlbLoading(true);
     try {
-      await api.triggerXinwenlianbo();
-      alert('新闻联播录制已触发');
-      fetchXwlbStatus();
+      const task = await api.triggerXinwenlianbo();
+      setXwlbStatus({ date: task.taskDate, status: task.status });
     } catch (err) {
       alert('触发失败：' + err.message);
     } finally {
@@ -154,9 +160,9 @@ export default function SourceManager() {
   const handleStopXwlb = async () => {
     setXwlbLoading(true);
     try {
-      await api.stopXinwenlianbo();
-      alert('录制已停止');
-      fetchXwlbStatus();
+      const task = await api.stopXinwenlianbo();
+      await fetchXwlbStatus();
+      if (!task) alert('当前没有正在录制的任务');
     } catch (err) {
       alert('停止失败：' + err.message);
     } finally {
@@ -206,15 +212,15 @@ export default function SourceManager() {
   const inactiveCount = sources.filter((s) => !s.isActive).length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="w-full">
+      <header className="news-section-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">来源健康管理</h1>
+          <h1>来源健康管理</h1>
           <p className="mt-1 text-sm text-gray-500">
             连续失败达到阈值的来源会自动停用，可在此重新激活或删除来源
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link
             to="/"
             className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
@@ -222,7 +228,7 @@ export default function SourceManager() {
             返回首页
           </Link>
           <button
-            onClick={fetchHealth}
+            onClick={() => { fetchHealth(); fetchXwlbStatus(false); }}
             disabled={loading}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -236,7 +242,7 @@ export default function SourceManager() {
             {crawlingAll ? '抓取中...' : '全部抓取'}
           </button>
         </div>
-      </div>
+      </header>
 
       {inactiveCount > 0 && (
         <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-4">
@@ -293,7 +299,7 @@ export default function SourceManager() {
       {loading && sources.length === 0 ? (
         <div className="py-12 text-center text-gray-500">加载中...</div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -307,6 +313,9 @@ export default function SourceManager() {
                   连续失败
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  更新时间
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
                   最后错误
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -361,6 +370,9 @@ export default function SourceManager() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {source.consecutiveFailures || 0}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">
+                    <div>最新文章 {formatHealthTime(source.latestArticleAt)}</div>
                   </td>
                   <td className="px-4 py-3">
                     {source.lastError ? (

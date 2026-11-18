@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useSpeech } from './hooks/useSpeech.js';
 import { useTtsSettings } from './hooks/useTtsSettings.js';
 import { useAuth } from './hooks/useAuth.js';
@@ -17,47 +17,48 @@ import PushNews from './components/PushNews.jsx';
 import { api } from './services/api.js';
 
 function Navbar({ user, isLoading, onLogout }) {
-  return (
-    <nav className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <Link to="/" className="text-lg font-bold text-gray-900">AI 新闻播报</Link>
-        <div className="flex items-center gap-4">
-          <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">首页</Link>
-          {!isLoading && user?.role === 'admin' && <Link to="/sources" className="text-sm text-gray-600 hover:text-gray-900">来源管理</Link>}
-          <Link to="/settings" className="text-sm text-gray-600 hover:text-gray-900">设置</Link>
-          {!isLoading && user?.role === 'admin' && <Link to="/wechat-settings" className="text-sm text-gray-600 hover:text-gray-900">公众号后台</Link>}
+  const isAdmin = !isLoading && user?.role === 'admin';
+  const editionDate = new Date().toLocaleDateString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  });
 
-          {!isLoading && (
-            user ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-700">{user.displayName || user.email}{user.role === 'admin' ? '（管理员）' : ''}</span>
-                <button
-                  onClick={onLogout}
-                  className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  退出登录
-                </button>
-              </div>
+  return (
+    <header className="news-header">
+      <div className="news-shell news-utility">
+        <time>{editionDate}</time>
+        {!isLoading && (
+          <div className="news-account">
+            {user ? (
+              <>
+                <span className="truncate">{user.displayName || user.email}</span>
+                <button className="shrink-0" onClick={onLogout}>退出登录</button>
+              </>
             ) : (
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/login"
-                  className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  登录
-                </Link>
-                <Link
-                  to="/register"
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  注册
-                </Link>
-              </div>
-            )
-          )}
-        </div>
+              <>
+                <Link to="/login">登录</Link>
+                <Link to="/register">注册</Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
-    </nav>
+      <div className="news-shell news-masthead">
+        <Link to="/" className="news-wordmark">AI 新闻播报</Link>
+      </div>
+      <nav className="news-nav" aria-label="主导航">
+        <div className="news-shell news-nav-links">
+          <NavLink to="/" end>首页</NavLink>
+          <NavLink to="/today">今日推送</NavLink>
+          <NavLink to="/settings">设置</NavLink>
+          {isAdmin && <NavLink to="/sources">来源管理</NavLink>}
+          {isAdmin && <NavLink to="/wechat-settings">公众号后台</NavLink>}
+        </div>
+      </nav>
+    </header>
   );
 }
 
@@ -126,10 +127,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen pb-20">
       <Navbar user={user} isLoading={isLoading} onLogout={handleLogout} />
 
-      <div className="mx-auto max-w-5xl px-4 py-6">
+      <main className="news-shell news-main">
         {!isSupported && <p className="mb-4 text-sm text-gray-500">当前浏览器不支持语音播报，可以正常阅读新闻。</p>}
         <Routes>
           <Route
@@ -163,14 +164,14 @@ export default function App() {
           <Route path="/wechat-settings" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <WechatSettings /> : <Navigate to={user ? '/' : '/login'} replace />} />
           <Route path="/wechat-login" element={<WechatLogin onLogin={wechatLogin} />} />
           <Route path="/push/:id" element={<PushNews user={user} isLoading={isLoading} />} />
-          <Route path="/today" element={<TodayNews />} />
+          <Route path="/today" element={<TodayNews activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} />} />
           <Route path="/login" element={<LoginForm onLogin={login} />} />
           <Route
             path="/register"
             element={<RegisterForm onRegister={register} />}
           />
         </Routes>
-      </div>
+      </main>
 
       <AutoPlayBar
         currentIndex={currentIndex}

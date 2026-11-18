@@ -1,61 +1,96 @@
 import { jest } from '@jest/globals';
-import { getDb, closeDb, initSchema } from '../src/db.js';
+import { getDb, closeDb } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import { listArticles } from '../src/models/article.js';
+import { crawlSource, crawlAllSources, normalizeArticle } from '../src/services/crawler.js';
+import { triggerManualCrawl, triggerManualCrawlForSource } from '../src/services/scheduler.js';
 
-jest.unstable_mockModule('rss-parser', () => ({
-  default: class Parser {
-    async parseURL(url) {
-      if (url === 'http://fail.com/rss') throw new Error('Network error');
-      return {
-        items: [
-          { title: 'Item 1', link: 'http://example.com/1', isoDate: new Date().toISOString() },
-          { title: '  ', link: 'http://example.com/empty', isoDate: new Date().toISOString() },
-          { title: 'Item 2', link: 'http://example.com/2', isoDate: new Date().toISOString() }
-        ]
-      };
-    }
-  }
-}));
+const rss = `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Feed</title>
+  <item><title>Item 1</title><link>http://example.com/1</link>
+    <pubDate>Wed, 18 Nov 2026 12:00:00 GMT</pubDate></item>
+  <item><title> </title><link>http://example.com/empty</link></item>
+  <item><title>Item 2</title><link>http://example.com/2</link></item>
+  <item><title>Invalid link</title><link>javascript:void(0)</link></item>
+</channel></rss>`;
 
-const { crawlSource, crawlAllSources, normalizeArticle } = await import('../src/services/crawler.js');
+function addSource(name = 'Source', url = 'https://example.org/feed') {
+  return insertSource({ name, rssUrl: url, category: 'general' });
+}
 
 describe('Crawler', () => {
   beforeEach(() => {
     process.env.DB_PATH = ':memory:';
-    const db = getDb();
-    initSchema(db);
+    getDb();
+    jest.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === 'http://fail.com/rss') return new Response(null, { status: 404 });
+      return new Response(rss);
+    });
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     closeDb();
     delete process.env.DB_PATH;
   });
 
-  it('normalizeArticle normalizes fields', () => {
-    const article = normalizeArticle({ title: ' T ', contentSnippet: ' S ', link: 'http://x.com' }, 1);
-    expect(article.title).toBe('T');
-    expect(article.summary).toBe('S');
-    expect(article.originalUrl).toBe('http://x.com');
-    expect(article.sourceId).toBe(1);
+  it('normalizes text, relative links and publication dates', () => {
+    expect(normalizeArticle({
+      title: { _: ' 相对链接 ' }, contentSnippet: ' 摘要 ', link: '/news/1',
+      isoDate: 'invalid', pubDate: 'Wed, 18 Nov 2026 12:00:00 GMT'
+    }, 1, 'https://example.org/feed')).toMatchObject({
+      title: '相对链接',
+      summary: '摘要',
+      originalUrl: 'https://example.org/news/1',
+      sourceId: 1,
+      publishedAt: '2026-11-18T12:00:00.000Z'
+    });
   });
 
-  it('crawlSource inserts articles and skips empty titles', async () => {
-    insertSource({ name: 'Src', rssUrl: 'http://s.com/rss', category: 'test', isActive: 1 });
-    const source = getAllSources()[0];
-    const results = await crawlSource(source);
-    expect(results.length).toBe(2);
-    const articles = listArticles();
-    expect(articles.items.length).toBe(2);
+  it('skips invalid items and does not count duplicate articles as new', async () => {
+    addSource();
+    const [source] = getAllSources();
+    expect(await crawlSource(source)).toHaveLength(2);
+    expect(listArticles().items).toHaveLength(2);
+    expect(await crawlSource(source)).toEqual([]);
   });
 
-  it('crawlAllSources isolates errors', async () => {
-    insertSource({ name: 'Good', rssUrl: 'http://good.com/rss', category: 'test', isActive: 1 });
-    insertSource({ name: 'Bad', rssUrl: 'http://fail.com/rss', category: 'test', isActive: 1 });
-    const sources = getAllSources();
-    const results = await crawlAllSources(sources);
-    expect(results.length).toBe(2);
+  it('isolates a 404 and leaves it unretried', async () => {
+    addSource();
+    addSource('Bad', 'http://fail.com/rss');
+    const results = await crawlAllSources(getAllSources());
+    expect(results).toHaveLength(2);
     expect(results[0].count).toBe(2);
-    expect(results[1].error).toBe('Network error');
-  }, 10000);
+    expect(results[1]).toMatchObject({ error: expect.stringContaining('404'), errorType: 'http' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries temporary HTTP errors but skips retries on invalid XML', async () => {
+    addSource();
+    const [source] = getAllSources();
+    fetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    expect(await crawlSource(source)).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    fetch.mockResolvedValueOnce(new Response('<html>不是 RSS</html>'));
+    await expect(crawlSource(source)).rejects.toMatchObject({ type: 'parse' });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry immediately when the publisher requests a longer wait', async () => {
+    addSource();
+    fetch.mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '60' } }));
+    await expect(crawlSource(getAllSources()[0])).rejects.toMatchObject({ type: 'http' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares an overlapping batch and single-source request', async () => {
+    const id = addSource();
+    const [first, second, single] = await Promise.all([
+      triggerManualCrawl(), triggerManualCrawl(), triggerManualCrawlForSource(id)
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(first).toEqual(second);
+    expect(single).toEqual(first[0]);
+  });
 });

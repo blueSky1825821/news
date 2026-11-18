@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getActiveSources, getSourceById } from '../models/source.js';
-import { crawlAllSources, crawlSource } from './crawler.js';
+import { crawlAllSources, crawlSource, classifyError } from './crawler.js';
 import { getWechatSettings } from '../models/wechatSettings.js';
 import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
@@ -36,8 +36,7 @@ export function startScheduler(cronExpression = '*/30 * * * *') {
   task = cron.schedule(cronExpression, async () => {
     try {
       console.log('[Scheduler] Starting crawl...');
-      const sources = getActiveSources();
-      await crawlAllSources(sources);
+      await crawlActiveRssSources();
       console.log('[Scheduler] Crawl finished.');
     } catch (err) {
       console.error('[Scheduler] Crawl task failed:', err.message);
@@ -58,9 +57,27 @@ export function stopScheduler() {
 
 export async function triggerManualCrawl() {
   console.log('[Scheduler] Manual crawl triggered.');
-  const sources = getActiveSources();
-  const results = await crawlAllSources(sources);
-  return results;
+  return crawlActiveRssSources();
+}
+
+let activeBatch = null;
+const activeSources = new Map();
+
+function crawlActiveRssSources() {
+  if (!activeBatch) {
+    const sources = getActiveSources().filter((source) => source.type === 'rss');
+    activeBatch = crawlAllSources(sources, crawlSourceOnce).finally(() => { activeBatch = null; });
+  }
+  return activeBatch;
+}
+
+function crawlSourceOnce(source) {
+  let pending = activeSources.get(source.id);
+  if (!pending) {
+    pending = crawlWithHealth(source).finally(() => activeSources.delete(source.id));
+    activeSources.set(source.id, pending);
+  }
+  return pending;
 }
 
 export async function triggerManualCrawlForSource(sourceId) {
@@ -71,20 +88,31 @@ export async function triggerManualCrawlForSource(sourceId) {
   if (!source.isActive) {
     throw new Error('Source is inactive');
   }
-  try {
-    const articles = await crawlSource(source);
-    recordSuccess(source.id);
-    return { source: source.name, count: articles.length, articles };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'Unknown error');
-    console.error(`Manual crawl failed for ${source.name}:`, msg);
-    recordFailure(source.id, msg);
-    const threshold = getFailureThreshold();
-    if (deactivateSource(source.id, threshold)) {
-      console.warn(`[Health] Source "${source.name}" deactivated after ${threshold} consecutive failures.`);
-    }
-    throw err instanceof Error ? err : new Error(msg);
+  if (source.type !== 'rss') {
+    throw new Error('Source is not an RSS feed');
   }
+  const articles = await crawlSourceOnce(source);
+  return { source: source.name, count: articles.length, articles };
+}
+
+async function crawlWithHealth(source) {
+  let articles;
+  try {
+    articles = await crawlSource(source);
+  } catch (err) {
+    const { type, message } = classifyError(err);
+    // Storage errors are operational failures, not evidence that the source is down.
+    if (type !== 'unknown' && getSourceById(source.id)) {
+      recordFailure(source.id, message);
+      const threshold = getFailureThreshold();
+      if (deactivateSource(source.id, threshold)) {
+        console.warn(`[Health] Source "${source.name}" deactivated after ${threshold} consecutive failures.`);
+      }
+    }
+    throw err;
+  }
+  if (getSourceById(source.id)) recordSuccess(source.id);
+  return articles;
 }
 
 let summaryTask = null;
@@ -205,8 +233,7 @@ export function stopXinwenlianboScheduler() {
   }
 }
 
-export async function triggerManualXinwenlianbo() {
-  const today = new Date().toISOString().slice(0, 10);
+export async function triggerManualXinwenlianbo(today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' })) {
   console.log(`[Xinwenlianbo] Manual trigger for ${today}`);
   return await runXinwenlianboTask(today);
 }

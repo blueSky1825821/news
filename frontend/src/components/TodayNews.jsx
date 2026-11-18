@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import NewsCard from './NewsCard.jsx';
 
-export default function TodayNews() {
+export default function TodayNews({ activeArticleId, onPlaySingle }) {
   const [articles, setArticles] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
@@ -32,16 +32,16 @@ export default function TodayNews() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">今日推送</h1>
+    <div aria-busy={loading}>
+      <header className="news-section-header">
+        <h1>今日推送</h1>
         <Link
           to="/"
           className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
         >
           返回首页
         </Link>
-      </div>
+      </header>
 
       {loading ? (
         <div className="py-12 text-center text-gray-500">加载中...</div>
@@ -56,13 +56,13 @@ export default function TodayNews() {
           <p className="mb-4 text-sm text-gray-500">
             共 {pagination.total} 篇（最近 24 小时）
           </p>
-          <div className="space-y-4">
+          <div className="news-feed">
             {articles.map((article) => (
               <NewsCard
                 key={article.id}
                 article={article}
-                isActive={false}
-                onPlay={() => {}}
+                isActive={activeArticleId === article.id}
+                onPlay={onPlaySingle && ((a) => onPlaySingle(a, `${a.title}。${a.summary || ''}`))}
               />
             ))}
           </div>

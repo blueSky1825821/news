@@ -103,7 +103,7 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="news-reading">
         <div className="text-center text-gray-500">加载中...</div>
       </div>
     );
@@ -111,7 +111,7 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
 
   if (error || !article) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="news-reading">
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error || '文章不存在'}
         </div>
@@ -147,7 +147,7 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
   const plainText = extractPlainText(article.content);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className="news-reading">
       <button
         onClick={() => navigate(-1)}
         className="mb-4 rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
@@ -156,12 +156,12 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
       </button>
 
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-gray-900">{article.title}</h1>
+        <h1 className="text-gray-900">{article.title}</h1>
         {isAdmin && <button onClick={handleToggleFlag} className="text-xl" title={isFlagged ? '取消标记' : '标记为重要'}>
           {isFlagged ? '★' : '☆'}
         </button>}
       </div>
-      <div className="mt-2 flex items-center gap-3 text-sm text-gray-500">
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-500">
         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
           {article.sourceName}
         </span>
@@ -211,7 +211,7 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
         </div>
       )}
 
-      <div className="mt-6">
+      <div className="news-reading-body mt-6">
         {article.content ? (
           <div
             className="prose max-w-none text-gray-800"
