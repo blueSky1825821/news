@@ -11,6 +11,7 @@ import { getDb } from '../db.js';
 
 
 import { cleanupOldArticles } from '../models/article.js';
+import { runXinwenlianboTask, stopRecording } from './xinwenlianbo/orchestrator.js';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
@@ -168,4 +169,48 @@ export function stopCleanupScheduler() {
     cleanupTask = null;
     console.log('[Cleanup] Scheduler stopped.');
   }
+}
+
+let xinwenlianboTask = null;
+
+export function startXinwenlianboScheduler() {
+  if (xinwenlianboTask) return;
+  if (process.env.XINWENLIANBO_ENABLED === 'false') {
+    console.log('[Xinwenlianbo] Scheduler disabled.');
+    return;
+  }
+
+  const cronExpression = process.env.XINWENLIANBO_CRON || '0 19 * * *';
+
+  xinwenlianboTask = cron.schedule(cronExpression, async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      console.log(`[Xinwenlianbo] Scheduled task triggered for ${today}`);
+      await runXinwenlianboTask(today);
+    } catch (err) {
+      console.error('[Xinwenlianbo] Scheduled task failed:', err.message);
+    }
+  }, {
+    timezone: 'Asia/Shanghai'
+  });
+
+  console.log('[Xinwenlianbo] Scheduler started with cron:', cronExpression);
+}
+
+export function stopXinwenlianboScheduler() {
+  if (xinwenlianboTask) {
+    xinwenlianboTask.stop();
+    xinwenlianboTask = null;
+    console.log('[Xinwenlianbo] Scheduler stopped.');
+  }
+}
+
+export async function triggerManualXinwenlianbo() {
+  const today = new Date().toISOString().slice(0, 10);
+  console.log(`[Xinwenlianbo] Manual trigger for ${today}`);
+  return await runXinwenlianboTask(today);
+}
+
+export function stopXinwenlianboRecording() {
+  return stopRecording();
 }

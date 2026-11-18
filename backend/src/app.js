@@ -12,6 +12,7 @@ import categoriesRouter from './routes/categories.js';
 import settingsRouter from './routes/settings.js';
 import userCategoriesRouter from './routes/userCategories.js';
 import wechatRouter from './routes/wechat.js';
+import xinwenlianboRouter from './routes/xinwenlianbo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,8 @@ app.use('/news/api/categories', categoriesRouter);
 app.use('/news/api/settings', settingsRouter);
 app.use('/news/api/users/categories', userCategoriesRouter);
 app.use('/news/api/wechat', wechatRouter);
+app.use('/api/xinwenlianbo', xinwenlianboRouter);
+app.use('/news/api/xinwenlianbo', xinwenlianboRouter);
 
 // Serve frontend static files in production under /news
 const distPath = path.join(__dirname, '../../frontend/dist');

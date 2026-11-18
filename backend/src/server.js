@@ -2,7 +2,7 @@ import './config.js';
 import { app } from './app.js';
 import { getDb, closeDb } from './db.js';
 import { seedSources } from './seed.js';
-import { startScheduler, startSummaryPushScheduler, startCleanupScheduler, stopScheduler, stopSummaryPushScheduler, stopCleanupScheduler } from './services/scheduler.js';
+import { startScheduler, startSummaryPushScheduler, startCleanupScheduler, startXinwenlianboScheduler, stopScheduler, stopSummaryPushScheduler, stopCleanupScheduler, stopXinwenlianboScheduler } from './services/scheduler.js';
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -23,6 +23,7 @@ seedSources();
 startScheduler();
 startSummaryPushScheduler();
 startCleanupScheduler();
+startXinwenlianboScheduler();
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
@@ -34,6 +35,7 @@ function gracefulShutdown(signal) {
   stopScheduler();
   stopSummaryPushScheduler();
   stopCleanupScheduler();
+  stopXinwenlianboScheduler();
   server.close(() => {
     closeDb();
     console.log('[Server] Closed. Exiting.');
