@@ -206,7 +206,11 @@ router.post('/resend-verification', authMiddleware, async (req, res, next) => {
     }
     deleteUserVerificationTokens(user.id);
     const token = createVerificationToken(user.id);
-    await sendVerificationEmail(user.email, token);
+    try {
+      await sendVerificationEmail(user.email, token);
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr.message);
+    }
     res.sendJson(0, 'Verification email sent');
   } catch (err) { next(err); }
 });

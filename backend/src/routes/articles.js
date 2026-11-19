@@ -41,6 +41,27 @@ router.get('/today', (req, res, next) => {
   }
 });
 
+router.get('/hot', async (req, res, next) => {
+  try {
+    const range = req.query.range === 'week' ? 'week' : 'today';
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Number(req.query.limit) || 20);
+    const { items, total, page: p, limit: l } = getHotArticles(range, page, limit);
+    res.sendJson(0, 'success', {
+      items,
+      pagination: { page: p, limit: l, total, totalPages: Math.ceil(total / l) }
+    });
+  } catch (err) { next(err); }
+});
+
+router.get('/hot-sidebar', async (req, res, next) => {
+  try {
+    const range = req.query.range === 'week' ? 'week' : 'today';
+    const { items } = getHotArticles(range, 1, 5);
+    res.sendJson(0, 'success', { items });
+  } catch (err) { next(err); }
+});
+
 router.get('/:id', (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
@@ -90,26 +111,5 @@ function getHotArticles(range, page = 1, limit = 20) {
   const items = stmt.all(since, maxLimit, offset);
   return { items, total, page, limit: maxLimit };
 }
-
-router.get('/hot', async (req, res, next) => {
-  try {
-    const range = req.query.range === 'week' ? 'week' : 'today';
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Number(req.query.limit) || 20);
-    const { items, total, page: p, limit: l } = getHotArticles(range, page, limit);
-    res.sendJson(0, 'success', {
-      items,
-      pagination: { page: p, limit: l, total, totalPages: Math.ceil(total / l) }
-    });
-  } catch (err) { next(err); }
-});
-
-router.get('/hot-sidebar', async (req, res, next) => {
-  try {
-    const range = req.query.range === 'week' ? 'week' : 'today';
-    const { items } = getHotArticles(range, 1, 5);
-    res.sendJson(0, 'success', { items });
-  } catch (err) { next(err); }
-});
 
 export default router;

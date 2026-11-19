@@ -1,6 +1,8 @@
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { getDb, closeDb, initSchema } from '../src/db.js';
+import { createVerificationToken, findVerificationToken } from '../src/models/emailVerification.js';
+import { createPasswordResetToken } from '../src/models/passwordReset.js';
 
 describe('Auth API', () => {
   beforeEach(() => {
@@ -112,5 +114,111 @@ describe('Auth API', () => {
     expect(res.body.code).toBe(0);
     expect(res.body.data.user.email).toBe('test@example.com');
     expect(res.body.data.user.categories).toEqual(['tech']);
+    expect(res.body.data.user.emailVerified).toBe(0);
+  });
+
+  it('POST /api/auth/verify-email verifies with valid token', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'verify@test.com', password: 'password123' });
+    const userId = registerRes.body.data.user.id;
+    const token = createVerificationToken(userId);
+
+    const res = await request(app)
+      .post('/api/auth/verify-email')
+      .send({ token });
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+
+    const meRes = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${registerRes.body.data.token}`);
+    expect(meRes.body.data.user.emailVerified).toBe(1);
+  });
+
+  it('POST /api/auth/verify-email rejects invalid token', async () => {
+    const res = await request(app)
+      .post('/api/auth/verify-email')
+      .send({ token: 'invalid' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(1020);
+  });
+
+  it('POST /api/auth/resend-verification sends new token', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'resend@test.com', password: 'password123' });
+    const token = registerRes.body.data.token;
+
+    const res = await request(app)
+      .post('/api/auth/resend-verification')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+  });
+
+  it('POST /api/auth/forgot-password returns success for any email', async () => {
+    const res = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'nonexistent@test.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+  });
+
+  it('POST /api/auth/reset-password resets with valid token', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'reset@test.com', password: 'password123' });
+    const userId = registerRes.body.data.user.id;
+    const token = createPasswordResetToken(userId);
+
+    const res = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token, password: 'newpassword123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'reset@test.com', password: 'newpassword123' });
+    expect(loginRes.status).toBe(200);
+  });
+
+  it('PUT /api/auth/change-password rejects wrong old password', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'changepw@test.com', password: 'password123' });
+    const token = registerRes.body.data.token;
+
+    const res = await request(app)
+      .put('/api/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: 'wrong', newPassword: 'newpassword123' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe(1009);
+  });
+
+  it('PUT /api/auth/change-password changes password with correct old password', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'changepw2@test.com', password: 'password123' });
+    const token = registerRes.body.data.token;
+
+    const res = await request(app)
+      .put('/api/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ oldPassword: 'password123', newPassword: 'newpassword123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'changepw2@test.com', password: 'newpassword123' });
+    expect(loginRes.status).toBe(200);
   });
 });
