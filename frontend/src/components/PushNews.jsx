@@ -31,7 +31,7 @@ export default function PushNews({ user, isLoading }) {
 
   const handleCopyText = useCallback(async () => {
     if (!push?.articles?.length) return;
-    const { text } = formatWechatPublication({ ...push, url: listUrl });
+    const { text } = formatWechatPublication({ articles: push.articles });
     try {
       await copyWechatPublication({ text });
       setCopied(true);
@@ -39,7 +39,7 @@ export default function PushNews({ user, isLoading }) {
     } catch {
       alert('复制失败，可在公众号排版中下载纯文本。');
     }
-  }, [push, listUrl]);
+  }, [push]);
 
   if (error) {
     return (
@@ -153,7 +153,7 @@ export default function PushNews({ user, isLoading }) {
 
       {activeTab === 'wechat' && (
         <WechatPublication key={push.id} title={push.title} articles={push.articles}
-          url={listUrl} createdAt={push.createdAt} />
+          url={listUrl} />
       )}
     </div>
   );

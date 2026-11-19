@@ -1,4 +1,4 @@
-import { getDb } from '../db.js';
+import { getDb, withWriteTransaction } from '../db.js';
 
 export function createComment({ articleId, userId, content, parentId = null }) {
   const db = getDb();
@@ -48,9 +48,10 @@ export function softDeleteComment(id) {
 }
 
 export function reportComment(commentId, reporterId, reason) {
-  const db = getDb();
-  db.prepare(`INSERT INTO comment_reports (commentId, reporterId, reason) VALUES (?, ?, ?)`).run(commentId, reporterId, reason);
-  db.prepare(`UPDATE comments SET reportCount = reportCount + 1 WHERE id = ?`).run(commentId);
+  withWriteTransaction(db => {
+    db.prepare(`INSERT INTO comment_reports (commentId, reporterId, reason) VALUES (?, ?, ?)`).run(commentId, reporterId, reason);
+    db.prepare(`UPDATE comments SET reportCount = reportCount + 1 WHERE id = ?`).run(commentId);
+  });
 }
 
 export function getReportedComments() {
@@ -65,7 +66,8 @@ export function getReportedComments() {
 }
 
 export function clearCommentReports(commentId) {
-  const db = getDb();
-  db.prepare(`DELETE FROM comment_reports WHERE commentId = ?`).run(commentId);
-  db.prepare(`UPDATE comments SET reportCount = 0 WHERE id = ?`).run(commentId);
+  withWriteTransaction(db => {
+    db.prepare(`DELETE FROM comment_reports WHERE commentId = ?`).run(commentId);
+    db.prepare(`UPDATE comments SET reportCount = 0 WHERE id = ?`).run(commentId);
+  });
 }

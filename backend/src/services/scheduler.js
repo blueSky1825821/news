@@ -11,7 +11,7 @@ import { getDb } from '../db.js';
 
 
 import { cleanupOldArticles } from '../models/article.js';
-import { runXinwenlianboTask, stopRecording } from './xinwenlianbo/orchestrator.js';
+import { getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
@@ -220,7 +220,7 @@ export function startXinwenlianboScheduler() {
 
   xinwenlianboTask = cron.schedule(cronExpression, async () => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getXinwenlianboDate();
       console.log(`[Xinwenlianbo] Scheduled task triggered for ${today}`);
       await runXinwenlianboTask(today);
     } catch (err) {
@@ -239,13 +239,4 @@ export function stopXinwenlianboScheduler() {
     xinwenlianboTask = null;
     console.log('[Xinwenlianbo] Scheduler stopped.');
   }
-}
-
-export async function triggerManualXinwenlianbo(today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' })) {
-  console.log(`[Xinwenlianbo] Manual trigger for ${today}`);
-  return await runXinwenlianboTask(today);
-}
-
-export function stopXinwenlianboRecording() {
-  return stopRecording();
 }

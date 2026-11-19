@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react';
 import { copyWechatPublication, formatWechatPublication, publicationUrl } from '../services/wechatPublication.js';
 
-export default function WechatPublication({ title, articles, url, createdAt }) {
+export default function WechatPublication({ title, articles, url }) {
   const [message, setMessage] = useState('');
   const preview = useRef(null);
   const titleField = useRef(null);
   const linkField = useRef(null);
   const listUrl = publicationUrl(url);
-  const publication = formatWechatPublication({ title, articles, url: listUrl, createdAt });
+  const publication = formatWechatPublication({ articles });
 
   async function copy(content, success, fallbackField) {
     try {
@@ -55,7 +55,7 @@ export default function WechatPublication({ title, articles, url, createdAt }) {
           onClick={() => copy({ text: title }, '已复制标题。', titleField.current)}>复制标题</button>
         <button type="button" className="rounded bg-gray-100 px-3 py-2 text-sm" onClick={downloadText}>下载纯文本</button>
       </div>
-      <div className="rounded border border-gray-200 bg-white p-4 sm:p-6" aria-label="正文预览">
+      <div className="rounded border border-gray-200 news-publication-paper p-4 sm:p-6" aria-label="正文预览">
         <div ref={preview} className="mx-auto max-w-2xl" dangerouslySetInnerHTML={{ __html: publication.html }} />
       </div>
       {listUrl && (

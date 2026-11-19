@@ -1,43 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api.js';
 import LikeUsersModal from './LikeUsersModal.jsx';
 
-export default function LikeButton({ articleId, user }) {
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
+export default function LikeButton({ article, user }) {
+  return <ArticleLike key={`${article.id}:${user?.id ?? 'guest'}`} article={article} user={user} />;
+}
+
+function ArticleLike({ article, user }) {
+  const articleId = article.id;
+  const [change, setChange] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-
-  useEffect(() => {
-    if (!articleId) return;
-    api.getLikes(articleId, 1, 1).then(data => setLikeCount(data.pagination.total)).catch(() => {});
-    if (user) {
-      api.hasLiked(articleId).then(data => setLiked(data.liked)).catch(() => {});
-    }
-  }, [articleId, user?.id]);
+  const [message, setMessage] = useState('');
+  const { liked = false, likeCount = null } = change ?? article;
 
   const handleToggle = async () => {
-    if (!user) { alert('请先登录'); return; }
+    if (!user) return setMessage('请先登录');
+    if (!user.emailVerified) return setMessage('请先验证邮箱');
     setLoading(true);
+    setMessage('');
     try {
       const data = await api.toggleLike(articleId);
-      setLiked(data.liked);
-      setLikeCount(data.likeCount);
+      setChange(data);
     } catch (err) {
-      if (err.code === 1023) alert('请验证邮箱后点赞');
-      else alert(err.message);
+      setMessage(err.code === 1023 ? '请先验证邮箱' : '点赞状态更新失败，请重试');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <>
-      <button onClick={handleToggle} disabled={loading} className="flex items-center gap-1 text-sm text-gray-600 hover:text-red-500">
-        <span>{liked ? '❤️' : '🤍'}</span>
-        <span onClick={(e) => { e.stopPropagation(); setShowModal(true); }} className="cursor-pointer hover:underline">{likeCount}</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={handleToggle} disabled={loading} aria-pressed={liked}
+        className="news-listen disabled:opacity-50">
+        <span aria-hidden="true" className={liked ? 'text-red-600' : ''}>{liked ? '♥' : '♡'}</span> 点赞
       </button>
+      <button type="button" onClick={() => setShowModal(true)} aria-haspopup="dialog"
+        aria-label={likeCount === null ? '查看点赞用户' : `查看点赞用户，共 ${likeCount} 人`}
+        className="rounded px-2 py-1 text-sm tabular-nums text-gray-600 hover:bg-gray-100">
+        {likeCount ?? '—'}
+      </button>
+      {message && <span role="status" className="text-xs text-gray-600">{message}</span>}
       {showModal && <LikeUsersModal articleId={articleId} onClose={() => setShowModal(false)} />}
-    </>
+    </div>
   );
 }

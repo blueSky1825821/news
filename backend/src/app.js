@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { responseWrapper } from './middleware/responseWrapper.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import articlesRouter from './routes/articles.js';
+import trendsRouter from './routes/trends.js';
 import sourcesRouter from './routes/sources.js';
 import crawlRouter from './routes/crawl.js';
 import authRouter from './routes/auth.js';
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use(responseWrapper);
 
 app.use('/api/articles', articlesRouter);
+app.use(['/api/trends', '/news/api/trends'], trendsRouter);
 app.use('/api/sources', sourcesRouter);
 app.use('/api/crawl', crawlRouter);
 app.use('/api/auth', authRouter);

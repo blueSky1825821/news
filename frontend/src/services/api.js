@@ -28,21 +28,22 @@ export const api = {
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.sourceId) qs.set('sourceId', String(params.sourceId));
+    if (params.view) qs.set('view', params.view);
     for (const category of [params.category].flat().filter(Boolean)) qs.append('category', category);
     const query = qs.toString();
-    return request('/api/articles' + (query ? '?' + query : ''));
+    return request('/api/articles' + (query ? '?' + query : ''), options);
   },
 
-  getArticle(id) {
-    return request('/api/articles/' + id);
+  getArticle(id, options = {}) {
+    return request('/api/articles/' + id + '?includeLikes=1', options);
   },
 
-  getTodayArticles(params = {}) {
+  getTodayArticles(params = {}, options = {}) {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     const query = qs.toString();
-    return request('/api/articles/today' + (query ? '?' + query : ''));
+    return request('/api/articles/today' + (query ? '?' + query + '&view=card' : '?view=card'), options);
   },
 
   getSources() {
@@ -177,17 +178,30 @@ export const api = {
   },
 
   // Xinwenlianbo
-  getXinwenlianboStatus() {
-    return request('/api/xinwenlianbo/status');
+  getXinwenlianboStatus(options = {}) {
+    return request('/api/xinwenlianbo/status', options);
   },
-  triggerXinwenlianbo() {
-    return request('/api/xinwenlianbo/trigger', { method: 'POST' });
+  triggerXinwenlianbo({ durationMinutes, force = false } = {}) {
+    return request(`/api/xinwenlianbo/trigger${force ? '?force=true' : ''}`, {
+      method: 'POST', body: JSON.stringify({ durationMinutes })
+    });
   },
-  stopXinwenlianbo() {
-    return request('/api/xinwenlianbo/stop', { method: 'POST' });
+  stopXinwenlianbo({ finish = false } = {}) {
+    return request('/api/xinwenlianbo/stop', { method: 'POST', body: JSON.stringify({ finish }) });
   },
-  getXinwenlianboTasks(page = 1) {
-    return request(`/api/xinwenlianbo/tasks?page=${page}`);
+  getXinwenlianboTasks(page = 1, options = {}) {
+    return request(`/api/xinwenlianbo/tasks?page=${page}`, options);
+  },
+  getXinwenlianboRecord(id, options = {}) {
+    return request(`/api/xinwenlianbo/tasks/${id}`, options);
+  },
+  deleteXinwenlianboRecord(id, { deleteArticle = false } = {}) {
+    return request(`/api/xinwenlianbo/tasks/${id}`, {
+      method: 'DELETE', body: JSON.stringify({ deleteArticle })
+    });
+  },
+  summarizeXinwenlianboRecord(id) {
+    return request(`/api/xinwenlianbo/tasks/${id}/summarize`, { method: 'POST' });
   },
   getXinwenlianboConfig() {
     return request('/api/xinwenlianbo/config');
@@ -248,11 +262,15 @@ export const api = {
   },
 
   // Hot ranking
+  getTrends({ refresh = false, signal } = {}) {
+    return request(`/api/trends${refresh ? '?refresh=1' : ''}`, { signal });
+  },
+
   getHotArticles(range = 'today', page = 1, limit = 20) {
-    return request(`/api/articles/hot?range=${range}&page=${page}&limit=${limit}`);
+    return request(`/api/articles/hot?view=card&range=${range}&page=${page}&limit=${limit}`);
   },
   getHotSidebar(range = 'today') {
-    return request(`/api/articles/hot-sidebar?range=${range}`);
+    return request(`/api/articles/hot-sidebar?view=card&range=${range}`);
   },
 
   // Profile

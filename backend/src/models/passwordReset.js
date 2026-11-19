@@ -1,4 +1,5 @@
-import { getDb } from '../db.js';
+import { getDb, withWriteTransaction } from '../db.js';
+import { updateUserPassword } from './user.js';
 import { randomBytes } from 'node:crypto';
 
 export function createPasswordResetToken(userId) {
@@ -21,12 +22,20 @@ export function findPasswordResetToken(token) {
   return stmt.get(token) || null;
 }
 
-export function markPasswordResetTokenUsed(token) {
-  const db = getDb();
-  const stmt = db.prepare(`
-    UPDATE password_reset_tokens
-    SET usedAt = datetime('now')
-    WHERE token = ?
-  `);
-  stmt.run(token);
+export function invalidatePasswordResetTokens(userId) {
+  getDb().prepare(`
+    UPDATE password_reset_tokens SET usedAt = datetime('now')
+    WHERE userId = ? AND usedAt IS NULL
+  `).run(userId);
+}
+
+export function resetPasswordWithToken(token, passwordHash) {
+  return withWriteTransaction(() => {
+    const record = findPasswordResetToken(token);
+    if (!record) return false;
+
+    updateUserPassword(record.userId, passwordHash);
+    invalidatePasswordResetTokens(record.userId);
+    return true;
+  });
 }

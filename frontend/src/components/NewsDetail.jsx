@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../services/api.js';
@@ -35,11 +35,27 @@ function isIframeAllowed(src) {
   }
 }
 
-function extractPlainText(html) {
-  if (!html) return '';
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  return div.textContent || div.innerText || '';
+function prepareArticleContent(content) {
+  const cleanHtml = DOMPurify.sanitize(content || '', {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'width', 'height', 'frameborder', 'allowfullscreen', 'controls', 'type'],
+    KEEP_CONTENT: true
+  });
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(cleanHtml, 'text/html');
+  doc.querySelectorAll('iframe').forEach((iframe) => {
+    const src = iframe.getAttribute('src');
+    if (!isIframeAllowed(src)) {
+      iframe.remove();
+    }
+  });
+  doc.querySelectorAll('img').forEach((img) => {
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    img.setAttribute('loading', 'lazy');
+    img.setAttribute('decoding', 'async');
+  });
+  return { html: doc.body.innerHTML, plainText: doc.body.textContent || '' };
 }
 
 export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSendEnabled = false }) {
@@ -48,27 +64,27 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const goBack = () => window.history.state?.idx > 0 ? navigate(-1) : navigate('/');
   const [isFlagged, setIsFlagged] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    api.getArticle(id)
+    api.getArticle(id, { signal: controller.signal })
       .then((data) => {
-        if (!cancelled) setArticle(data);
+        if (!controller.signal.aborted) setArticle(data);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || '加载失败');
+        if (!controller.signal.aborted) setError(err.message || '加载失败');
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    return () => controller.abort();
+  }, [id, attempt, user?.id]);
 
   useEffect(() => {
     if (!article || !isAdmin) { setIsFlagged(false); return; }
@@ -103,10 +119,12 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
     }
   };
 
+  const { html, plainText } = useMemo(() => prepareArticleContent(article?.content), [article?.content]);
+
   if (loading) {
     return (
       <div className="news-reading">
-        <div className="text-center text-gray-500">加载中...</div>
+        <div role="status" className="news-message">正在加载文章…</div>
       </div>
     );
   }
@@ -114,11 +132,12 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
   if (error || !article) {
     return (
       <div className="news-reading">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error || '文章不存在'}
         </div>
+        <button type="button" className="news-listen mr-3" onClick={() => setAttempt(value => value + 1)}>重试</button>
         <button
-          onClick={() => navigate(-1)}
+          onClick={goBack}
           className="mt-4 rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
         >
           返回列表
@@ -127,31 +146,10 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
     );
   }
 
-  const cleanHtml = DOMPurify.sanitize(article.content || '', {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'width', 'height', 'frameborder', 'allowfullscreen', 'controls', 'type'],
-    KEEP_CONTENT: true
-  });
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(cleanHtml, 'text/html');
-  doc.querySelectorAll('iframe').forEach((iframe) => {
-    const src = iframe.getAttribute('src');
-    if (!isIframeAllowed(src)) {
-      iframe.remove();
-    }
-  });
-  doc.querySelectorAll('img').forEach((img) => {
-    img.setAttribute('referrerpolicy', 'no-referrer');
-  });
-  const finalHtml = doc.body.innerHTML;
-
-  const plainText = extractPlainText(article.content);
-
   return (
     <div className="news-reading">
       <button
-        onClick={() => navigate(-1)}
+        onClick={goBack}
         className="mb-4 rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
       >
         返回列表
@@ -187,6 +185,11 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
         >
           查看原文
         </a>
+        <button type="button" className="news-action" onClick={() => {
+          const comments = document.getElementById('article-comments');
+          comments?.focus({ preventScroll: true });
+          comments?.scrollIntoView({ block: 'start' });
+        }}>查看评论</button>
         {isAdmin && massSendEnabled && <button
           onClick={handlePreview}
           disabled={previewLoading}
@@ -217,7 +220,7 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
         {article.content ? (
           <div
             className="prose max-w-none text-gray-800"
-            dangerouslySetInnerHTML={{ __html: finalHtml }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
@@ -247,7 +250,7 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
       )}
 
       <div className="mt-6 flex items-center gap-4">
-        <LikeButton articleId={article.id} user={user} />
+        <LikeButton article={article} user={user} />
       </div>
 
       <CommentSection articleId={article.id} user={user} />

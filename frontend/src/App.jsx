@@ -1,78 +1,28 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { useSpeech } from './hooks/useSpeech.js';
 import { useTtsSettings } from './hooks/useTtsSettings.js';
 import { useAuth } from './hooks/useAuth.js';
-import NewsList from './components/NewsList.jsx';
-import NewsDetail from './components/NewsDetail.jsx';
-import SourceManager from './components/SourceManager.jsx';
-import SettingsPage from './components/SettingsPage.jsx';
-import LoginForm from './components/LoginForm.jsx';
-import RegisterForm from './components/RegisterForm.jsx';
-import WechatSettings from './components/WechatSettings.jsx';
-import TodayNews from './components/TodayNews.jsx';
+import AppRoutes from './AppRoutes.jsx';
+import Navbar from './components/Navbar.jsx';
 import AutoPlayBar from './components/AutoPlayBar.jsx';
-import WechatLogin from './components/WechatLogin.jsx';
-import PushNews from './components/PushNews.jsx';
-import PortalNav from './components/PortalNav.jsx';
 import EmailVerificationBanner from './components/EmailVerificationBanner.jsx';
-import ForgotPassword from './components/ForgotPassword.jsx';
-import ResetPassword from './components/ResetPassword.jsx';
-import HotNews from './components/HotNews.jsx';
-import CommentManager from './components/CommentManager.jsx';
 import { api } from './services/api.js';
-
-function Navbar({ user, isLoading, onLogout }) {
-  const isAdmin = !isLoading && user?.role === 'admin';
-  const editionDate = new Date().toLocaleDateString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
-  });
-
-  return (
-    <header className="news-header">
-      <div className="news-shell news-utility">
-        <time>{editionDate}</time>
-        {!isLoading && (
-          <div className="news-account">
-            {user ? (
-              <>
-                <span className="truncate">{user.displayName || user.email?.split('@')[0] || user.email}</span>
-                <button className="shrink-0" onClick={onLogout}>退出登录</button>
-              </>
-            ) : (
-              <>
-                <Link to="/login">登录</Link>
-                <Link to="/register">注册</Link>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="news-shell news-masthead">
-        <Link to="/" className="news-wordmark">AI 新闻播报</Link>
-      </div>
-      <nav className="news-nav" aria-label="主导航">
-        <div className="news-shell news-nav-links">
-          <NavLink to="/" end>首页</NavLink>
-          <NavLink to="/today">今日推送</NavLink>
-          <NavLink to="/portal">门户导航</NavLink>
-          <NavLink to="/settings">设置</NavLink>
-          {isAdmin && <NavLink to="/sources">来源管理</NavLink>}
-          {isAdmin && <NavLink to="/wechat-settings">公众号后台</NavLink>}
-        </div>
-      </nav>
-    </header>
-  );
-}
 
 export default function App() {
   const { settings, setSettings } = useTtsSettings();
-  const { user, isLoading, login, wechatLogin, register, logout, updateCategories } = useAuth();
+  const { user, isLoading, login, wechatLogin, register, logout, refreshUser, updateCategories, updateProfile, changePassword } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const navigationType = useNavigationType();
+  const previousPath = useRef(pathname);
+
+  useEffect(() => {
+    if (pathname !== previousPath.current && navigationType !== 'POP') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    previousPath.current = pathname;
+  }, [pathname, navigationType]);
   const [massSendEnabled, setMassSendEnabled] = useState(false);
   useEffect(() => {
     let active = true;
@@ -135,56 +85,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen pb-20">
+      <a className="news-skip-link" href="#main-content">跳到正文</a>
       <Navbar user={user} isLoading={isLoading} onLogout={handleLogout} />
 
-      <EmailVerificationBanner user={user} />
-      <main className="news-shell news-main">
+      <EmailVerificationBanner key={user?.id} user={user} />
+      <main id="main-content" className="news-shell news-main" tabIndex={-1}>
         {!isSupported && <p className="mb-4 text-sm text-gray-500">当前浏览器不支持语音播报，可以正常阅读新闻。</p>}
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <NewsList
-                user={user}
-                isAdmin={!isLoading && user?.role === 'admin'}
-                activeArticleId={activeArticleId}
-                onPlaySingle={handlePlaySingle}
-                onPlayAll={handlePlayAll}
-              />
-            }
-          />
-          <Route
-            path="/article/:id"
-            element={<NewsDetail user={user} onPlaySingle={playSingle} isAdmin={!isLoading && user?.role === 'admin'} massSendEnabled={massSendEnabled} />}
-          />
-          <Route path="/sources" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <SourceManager /> : <Navigate to={user ? '/' : '/login'} replace />} />
-          <Route
-            path="/settings"
-            element={
-              <SettingsPage
-                settings={settings}
-                onChange={setSettings}
-                user={user}
-                onUpdateCategories={updateCategories}
-                voices={voices}
-              />
-            }
-          />
-          <Route path="/wechat-settings" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <WechatSettings /> : <Navigate to={user ? '/' : '/login'} replace />} />
-          <Route path="/wechat-login" element={<WechatLogin onLogin={wechatLogin} />} />
-          <Route path="/push/:id" element={<PushNews user={user} isLoading={isLoading} />} />
-          <Route path="/today" element={<TodayNews activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} />} />
-          <Route path="/portal" element={<PortalNav />} />
-          <Route path="/hot" element={<HotNews />} />
-          <Route path="/login" element={<LoginForm onLogin={login} />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/comment-manager" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <CommentManager /> : <Navigate to={user ? '/' : '/login'} replace />} />
-          <Route
-            path="/register"
-            element={<RegisterForm onRegister={register} />}
-          />
-        </Routes>
+        <AppRoutes user={user} isLoading={isLoading} massSendEnabled={massSendEnabled}
+          activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} onPlayAll={handlePlayAll}
+          onPlayText={playSingle} settings={settings} onChangeSettings={setSettings} voices={voices}
+          onUpdateCategories={updateCategories} onUpdateProfile={updateProfile} onChangePassword={changePassword}
+          onLogin={login} onWechatLogin={wechatLogin} onVerify={refreshUser} onRegister={register} />
       </main>
 
       <AutoPlayBar

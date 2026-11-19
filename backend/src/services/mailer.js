@@ -17,18 +17,32 @@ const transporter = nodemailer.createTransport({
   } : undefined,
 });
 
+function emailLink(page, token) {
+  const url = new URL(APP_BASE_URL);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('APP_BASE_URL must be a public HTTP(S) URL');
+  }
+  const basePath = url.pathname.replace(/\/+$/, '');
+  url.pathname = `${basePath.endsWith('/news') ? basePath : `${basePath}/news`}/${page}`;
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('token', token);
+  return url.href;
+}
+
 export async function sendVerificationEmail(to, token) {
-  const url = `${APP_BASE_URL}/news/verify-email?token=${token}`;
+  const url = emailLink('verify-email', token);
   await transporter.sendMail({
     from: SMTP_FROM,
     to,
     subject: '请验证您的邮箱 - AI新闻播报',
+    text: `点击以下链接验证邮箱。链接 24 小时内有效。\n${url}`,
     html: `<p>感谢您注册 AI新闻播报！请点击以下链接验证您的邮箱：</p><p><a href="${url}">${url}</a></p><p>链接24小时内有效。</p>`,
   });
 }
 
 export async function sendPasswordResetEmail(to, token) {
-  const url = `${APP_BASE_URL}/news/reset-password?token=${token}`;
+  const url = emailLink('reset-password', token);
   await transporter.sendMail({
     from: SMTP_FROM,
     to,

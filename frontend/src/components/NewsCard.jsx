@@ -52,7 +52,7 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
       </div>
       {variant !== 'brief' && article.summary && <p className="news-story-summary">{article.summary}</p>}
       <div className="flex items-center gap-3 mt-2">
-        <LikeButton articleId={article.id} user={user} />
+        <LikeButton article={article} user={user} />
         {onPlay && (
           <button onClick={() => onPlay(article)} className="news-listen" aria-label={`播报 ${article.title}`}>
             <span aria-hidden="true">▶</span> {isActive ? '播放中' : '播报'}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import XinwenlianboRecording from './XinwenlianboRecording.jsx';
 
 function formatHealthTime(value) {
   return value ? new Date(value).toLocaleString('zh-CN') : '—';
@@ -16,8 +17,7 @@ export default function SourceManager() {
   const [crawlingAll, setCrawlingAll] = useState(false);
   const [threshold, setThreshold] = useState(5);
   const [thresholdLoading, setThresholdLoading] = useState(false);
-  const [xwlbStatus, setXwlbStatus] = useState(null);
-  const [xwlbLoading, setXwlbLoading] = useState(false);
+  const [recordingRefresh, setRecordingRefresh] = useState(0);
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -46,27 +46,7 @@ export default function SourceManager() {
   useEffect(() => {
     fetchHealth();
     fetchThreshold();
-    fetchXwlbStatus(false);
   }, []);
-
-  const fetchXwlbStatus = async (refreshOnCompletion = true) => {
-    try {
-      const data = await api.getXinwenlianboStatus();
-      setXwlbStatus(data);
-      if (refreshOnCompletion && data?.status === 'completed') await fetchHealth();
-    } catch (err) {
-      console.error('加载新闻联播状态失败:', err);
-    }
-  };
-
-  // Auto-refresh xinwenlianbo status when task is in progress
-  useEffect(() => {
-    if (!xwlbStatus) return;
-    if (['recording', 'transcribing', 'summarizing'].includes(xwlbStatus.status)) {
-      const interval = setInterval(fetchXwlbStatus, 10000);
-      return () => clearInterval(interval);
-    }
-  }, [xwlbStatus?.status]);
 
   const handleActivate = async (id) => {
     setActivatingIds((prev) => new Set(prev).add(id));
@@ -145,31 +125,6 @@ export default function SourceManager() {
     }
   };
 
-  const handleTriggerXwlb = async () => {
-    setXwlbLoading(true);
-    try {
-      const task = await api.triggerXinwenlianbo();
-      setXwlbStatus({ date: task.taskDate, status: task.status });
-    } catch (err) {
-      alert('触发失败：' + err.message);
-    } finally {
-      setXwlbLoading(false);
-    }
-  };
-
-  const handleStopXwlb = async () => {
-    setXwlbLoading(true);
-    try {
-      const task = await api.stopXinwenlianbo();
-      await fetchXwlbStatus();
-      if (!task) alert('当前没有正在录制的任务');
-    } catch (err) {
-      alert('停止失败：' + err.message);
-    } finally {
-      setXwlbLoading(false);
-    }
-  };
-
   const handleDelete = async (source) => {
     const confirmed = window.confirm(
       `确定删除来源 "${source.name}" 吗？\n该来源下的所有已抓取文章也会被一并删除，此操作不可恢复。`
@@ -228,7 +183,7 @@ export default function SourceManager() {
             返回首页
           </Link>
           <button
-            onClick={() => { fetchHealth(); fetchXwlbStatus(false); }}
+            onClick={() => { fetchHealth(); setRecordingRefresh(value => value + 1); }}
             disabled={loading}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -243,6 +198,10 @@ export default function SourceManager() {
           </button>
         </div>
       </header>
+
+      {sources.some(source => source.type === 'xinwenlianbo') && (
+        <XinwenlianboRecording refresh={recordingRefresh} />
+      )}
 
       {inactiveCount > 0 && (
         <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-4">
@@ -336,26 +295,6 @@ export default function SourceManager() {
                       )}
                     </div>
                     <div className="max-w-xs truncate text-xs text-gray-500">{source.rssUrl}</div>
-                    {source.type === 'xinwenlianbo' && xwlbStatus && (
-                      <div className="mt-1 text-xs text-gray-500">
-                        今日状态：
-                        <span className={
-                          xwlbStatus.status === 'completed' ? 'text-green-600' :
-                          xwlbStatus.status === 'failed' ? 'text-red-600' :
-                          xwlbStatus.status === 'recording' ? 'text-blue-600 animate-pulse' :
-                          xwlbStatus.status === 'transcribing' ? 'text-purple-600 animate-pulse' :
-                          xwlbStatus.status === 'summarizing' ? 'text-orange-600 animate-pulse' :
-                          'text-gray-400'
-                        }>
-                          {xwlbStatus.status === 'completed' ? '已完成' :
-                           xwlbStatus.status === 'failed' ? '失败' :
-                           xwlbStatus.status === 'recording' ? '录制中' :
-                           xwlbStatus.status === 'transcribing' ? '转录中' :
-                           xwlbStatus.status === 'summarizing' ? '摘要中' :
-                           '待录制'}
-                        </span>
-                      </div>
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     {source.isActive ? (
@@ -390,24 +329,7 @@ export default function SourceManager() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      {source.type === 'xinwenlianbo' ? (
-                        <>
-                          <button
-                            onClick={handleTriggerXwlb}
-                            disabled={xwlbLoading || xwlbStatus?.status === 'recording' || xwlbStatus?.status === 'transcribing' || xwlbStatus?.status === 'summarizing'}
-                            className="rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 disabled:opacity-50"
-                          >
-                            {xwlbLoading ? '处理中...' : '手动录制'}
-                          </button>
-                          <button
-                            onClick={handleStopXwlb}
-                            disabled={xwlbLoading || xwlbStatus?.status !== 'recording'}
-                            className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-                          >
-                            停止
-                          </button>
-                        </>
-                      ) : (
+                      {source.type !== 'xinwenlianbo' && (
                         <button
                           onClick={() => handleCrawl(source.id)}
                           disabled={crawlingIds.has(source.id) || !source.isActive}

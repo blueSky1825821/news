@@ -1,36 +1,19 @@
 import { Router } from 'express';
-import { getDb } from '../db.js';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
-import { getSetting, setSetting } from '../models/settings.js';
-import { triggerManualXinwenlianbo, stopXinwenlianboRecording } from '../services/scheduler.js';
+import { setSetting } from '../models/settings.js';
+import {
+  getXinwenlianboConfig, getXinwenlianboDate, getXinwenlianboStatus,
+  startXinwenlianboTask, stopXinwenlianboTask, listXinwenlianboRecords,
+  getXinwenlianboRecord, startXinwenlianboSummary, deleteXinwenlianboRecord
+} from '../services/xinwenlianbo/orchestrator.js';
 
 const router = Router();
-let manualTask = null;
 
 router.use(authMiddleware, adminMiddleware);
 
-function getTodayDate() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
-}
-
 router.get('/status', (req, res, next) => {
   try {
-    const today = getTodayDate();
-    const db = getDb();
-    const task = db.prepare('SELECT * FROM xinwenlianbo_tasks WHERE taskDate = ?').get(today);
-
-    if (!task) {
-      res.sendJson(0, 'success', { date: today, status: 'pending' });
-      return;
-    }
-
-    res.sendJson(0, 'success', {
-      date: task.taskDate,
-      status: task.status,
-      startedAt: task.startedAt,
-      completedAt: task.completedAt,
-      errorMessage: task.errorMessage
-    });
+    res.sendJson(0, 'success', getXinwenlianboStatus());
   } catch (err) {
     next(err);
   }
@@ -38,37 +21,13 @@ router.get('/status', (req, res, next) => {
 
 router.post('/trigger', (req, res, next) => {
   try {
-    const enabled = process.env.XINWENLIANBO_ENABLED || getSetting('xwlb_enabled');
-    if (enabled === 'false') {
-      res.sendJson(1004, 'Xinwenlianbo recording is disabled.', null);
-      return;
-    }
-
-    const today = getTodayDate();
-    const db = getDb();
-    const existing = db.prepare('SELECT status FROM xinwenlianbo_tasks WHERE taskDate = ?').get(today);
-
-    if (existing?.status === 'completed' && !req.query.force) {
-      res.sendJson(1002, "Today's task already completed. Use force=true to re-record.", null);
-      return;
-    }
-
-    if (manualTask || ['recording', 'transcribing', 'summarizing'].includes(existing?.status)) {
-      res.sendJson(1003, "Today's task is already in progress.", null);
-      return;
-    }
-
-    manualTask = triggerManualXinwenlianbo(today)
-      .catch((err) => {
-        console.error('[Xinwenlianbo] Manual task failed:', err.message);
-        db.prepare(`
-          INSERT INTO xinwenlianbo_tasks (taskDate, status, errorMessage) VALUES (?, 'failed', ?)
-          ON CONFLICT(taskDate) DO UPDATE SET status = 'failed', errorMessage = excluded.errorMessage
-        `).run(today, err.message);
-      })
-      .finally(() => { manualTask = null; })
-      .catch((err) => console.error('[Xinwenlianbo] Unable to save task failure:', err.message));
-    res.sendJson(0, 'Task started', { taskDate: today, status: 'recording' });
+    const { durationMinutes } = req.body ?? {};
+    const { status, completion } = startXinwenlianboTask(getXinwenlianboDate(), {
+      force: req.query.force === 'true',
+      durationMinutes
+    });
+    completion.catch(err => console.error('[Xinwenlianbo] Manual task failed:', err.message));
+    res.sendJson(0, '录制已开始', { ...status, taskDate: status.date });
   } catch (err) {
     next(err);
   }
@@ -76,36 +35,54 @@ router.post('/trigger', (req, res, next) => {
 
 router.post('/stop', (req, res, next) => {
   try {
-    const stopped = stopXinwenlianboRecording();
-    if (stopped) {
-      const today = getTodayDate();
-      const db = getDb();
-      db.prepare("UPDATE xinwenlianbo_tasks SET status = 'failed', errorMessage = 'Stopped by user' WHERE taskDate = ? AND status = 'recording'").run(today);
-      res.sendJson(0, 'Recording stopped', { taskDate: today, status: 'failed' });
-    } else {
-      res.sendJson(0, 'No active recording to stop', null);
-    }
+    const status = stopXinwenlianboTask({ finish: req.body?.finish === true });
+    res.sendJson(0, status ? '结束指令已发送' : '当前没有正在录制的任务', status);
   } catch (err) {
     next(err);
   }
 });
 
+function positiveInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+}
+
 router.get('/tasks', (req, res, next) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
+    const page = positiveInteger(req.query.page, 1);
+    const limit = Math.min(positiveInteger(req.query.limit, 20), 100);
+    res.sendJson(0, 'success', listXinwenlianboRecords(page, limit));
+  } catch (err) {
+    next(err);
+  }
+});
 
-    const db = getDb();
-    const total = db.prepare('SELECT COUNT(*) as count FROM xinwenlianbo_tasks').get().count;
-    const items = db.prepare(`
-      SELECT * FROM xinwenlianbo_tasks ORDER BY taskDate DESC LIMIT ? OFFSET ?
-    `).all(limit, offset);
+router.get('/tasks/:id', (req, res, next) => {
+  try {
+    const record = getXinwenlianboRecord(positiveInteger(req.params.id, 0));
+    if (!record) throw Object.assign(new Error('录制记录不存在'), { statusCode: 404 });
+    res.sendJson(0, 'success', record);
+  } catch (err) {
+    next(err);
+  }
+});
 
-    res.sendJson(0, 'success', {
-      items,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+router.delete('/tasks/:id', (req, res, next) => {
+  try {
+    const result = deleteXinwenlianboRecord(positiveInteger(req.params.id, 0), {
+      deleteArticle: req.body?.deleteArticle === true
     });
+    res.sendJson(0, '录制记录已删除', { ...result, status: getXinwenlianboStatus() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/tasks/:id/summarize', (req, res, next) => {
+  try {
+    const { status, completion } = startXinwenlianboSummary(positiveInteger(req.params.id, 0));
+    completion.catch(err => console.error('[Xinwenlianbo] Manual summary failed:', err.message));
+    res.status(202).sendJson(0, '正在生成新闻摘要', status);
   } catch (err) {
     next(err);
   }
@@ -113,19 +90,10 @@ router.get('/tasks', (req, res, next) => {
 
 router.get('/config', (req, res, next) => {
   try {
-    const envOrDb = (key, envName) => {
-      const envValue = process.env[envName];
-      if (envValue !== undefined && envValue !== '') return envValue;
-      return getSetting(`xwlb_${key}`);
-    };
+    const { enabled, audioUrl, durationMinutes, llmProvider, llmModel, whisperExecutable, whisperModelPath } =
+      getXinwenlianboConfig();
     res.sendJson(0, 'success', {
-      enabled: (envOrDb('enabled', 'XINWENLIANBO_ENABLED') || 'true') !== 'false',
-      audioUrl: envOrDb('audioUrl', 'XINWENLIANBO_AUDIO_URL'),
-      durationMinutes: parseInt(envOrDb('durationMinutes', 'XINWENLIANBO_DURATION_MINUTES') || '30', 10),
-      llmProvider: envOrDb('llmProvider', 'LLM_PROVIDER'),
-      llmModel: envOrDb('llmModel', 'LLM_MODEL'),
-      whisperExecutable: envOrDb('whisperExecutable', 'WHISPER_EXECUTABLE'),
-      whisperModelPath: envOrDb('whisperModelPath', 'WHISPER_MODEL_PATH')
+      enabled, audioUrl, durationMinutes, llmProvider, llmModel, whisperExecutable, whisperModelPath
     });
   } catch (err) {
     next(err);

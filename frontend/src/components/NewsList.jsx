@@ -44,7 +44,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
     setLoading(true);
     setError('');
     api.getArticles({
-      page, limit: 20, sourceId: selectedSourceId,
+      page, limit: 20, view: 'card', sourceId: selectedSourceId,
       category: categoryFilter ? categoryFilter.split(',') : undefined
     }, { signal: controller.signal })
       .then((data) => {
@@ -59,7 +59,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, selectedSourceId, categoryFilter, refresh]);
+  }, [page, selectedSourceId, categoryFilter, refresh, user?.id]);
 
   const handleChannelChange = (next) => {
     setSelectedChannel(next);
@@ -108,7 +108,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
   );
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col gap-6 lg:flex-row">
       <div className="flex-1 min-w-0">
       <section className="news-interests" aria-label="兴趣分类">
         <div className="news-interests-label">

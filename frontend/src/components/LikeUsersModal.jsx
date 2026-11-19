@@ -1,29 +1,60 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../services/api.js';
 
 export default function LikeUsersModal({ articleId, onClose }) {
+  const dialog = useRef(null);
+  const titleId = useId();
   const [users, setUsers] = useState([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
+  const [status, setStatus] = useState('loading');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    const element = dialog.current;
+    element.showModal();
+    return () => element.close();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     api.getLikes(articleId, page).then(data => {
-      setUsers(prev => page === 1 ? data.users : [...prev, ...data.users]);
+      if (!active) return;
+      setUsers(current => page === 1 ? data.users : [...current, ...data.users]);
       setPagination(data.pagination);
-    }).catch(() => {});
-  }, [articleId, page]);
+      setStatus('ready');
+    }).catch(() => { if (active) setStatus('error'); });
+    return () => { active = false; };
+  }, [articleId, page, attempt]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-sm w-full max-h-[60vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold mb-4">点赞用户</h3>
-        <ul className="space-y-2">
-          {users.map(u => <li key={u.id} className="text-sm text-gray-700">{u.displayName}</li>)}
+    <dialog ref={dialog} aria-labelledby={titleId}
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      onClick={event => { if (event.target === event.currentTarget) onClose(); }}
+      className="w-[calc(100%-2rem)] max-w-sm rounded-xl border p-0 shadow-xl backdrop:bg-black/50">
+      <div className="max-h-[70vh] overflow-auto p-5">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id={titleId} className="font-semibold">点赞用户</h2>
+          <button type="button" className="news-listen" onClick={onClose}>关闭</button>
+        </div>
+        <ul className="mt-3 divide-y">
+          {users.map(user => <li key={user.id} className="break-words py-2 text-sm">{user.displayName}</li>)}
         </ul>
-        {pagination && page < pagination.totalPages && (
-          <button onClick={() => setPage(p => p + 1)} className="mt-4 text-blue-600 text-sm">加载更多</button>
+        {status === 'ready' && users.length === 0 && <p className="text-sm text-gray-600">还没有人点赞</p>}
+        {status === 'loading' && <p role="status" className="text-sm text-gray-600">加载中…</p>}
+        {status === 'error' && (
+          <button type="button" className="news-listen" onClick={() => {
+            setStatus('loading');
+            setAttempt(value => value + 1);
+          }}>加载失败，重试</button>
+        )}
+        {status === 'ready' && page < pagination?.totalPages && (
+          <button type="button" className="news-listen mt-3" onClick={() => {
+            setStatus('loading');
+            setPage(value => value + 1);
+          }}>加载更多</button>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

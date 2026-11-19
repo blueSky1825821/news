@@ -57,6 +57,8 @@ export function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_articles_sourceId ON articles(sourceId);
     CREATE INDEX IF NOT EXISTS idx_articles_publishedAt ON articles(publishedAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_articles_published_datetime ON articles(datetime(publishedAt));
+    CREATE INDEX IF NOT EXISTS idx_articles_fetched_datetime ON articles(datetime(fetchedAt));
 
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -246,6 +248,11 @@ export function initSchema(db) {
     db.exec(`ALTER TABLE articles ADD COLUMN headlines TEXT`);
   }
 
+  const hasEmailVerified = db.prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = 'emailVerified'").get();
+  if (!hasEmailVerified) {
+    db.exec('ALTER TABLE users ADD COLUMN emailVerified BOOLEAN NOT NULL DEFAULT 0');
+  }
+
   const hasDisplayName = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('users') WHERE name = 'displayName'`).get().count > 0;
   if (!hasDisplayName) {
     db.exec(`ALTER TABLE users ADD COLUMN displayName TEXT`);
@@ -276,5 +283,19 @@ export function closeDb() {
   if (dbInstance) {
     dbInstance.close();
     dbInstance = null;
+  }
+}
+
+// The callback must finish synchronously so no request can share an open transaction.
+export function withWriteTransaction(run) {
+  const db = getDb();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = run(db);
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
   }
 }

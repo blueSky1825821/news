@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../services/api.js';
-import { useAuth } from '../hooks/useAuth.js';
 import UserSettings from './UserSettings.jsx';
 
-function PasswordChangeForm() {
-  const { changePassword } = useAuth();
+function PasswordChangeForm({ onChangePassword }) {
   const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirm: '' });
   const [pwMessage, setPwMessage] = useState('');
 
@@ -13,7 +11,7 @@ function PasswordChangeForm() {
     if (pwForm.newPassword !== pwForm.confirm) { setPwMessage('两次密码不一致'); return; }
     if (pwForm.newPassword.length < 8) { setPwMessage('密码至少8位'); return; }
     try {
-      await changePassword(pwForm.oldPassword, pwForm.newPassword);
+      await onChangePassword(pwForm.oldPassword, pwForm.newPassword);
       setPwMessage('密码修改成功');
       setPwForm({ oldPassword: '', newPassword: '', confirm: '' });
     } catch (err) {
@@ -32,8 +30,7 @@ function PasswordChangeForm() {
   );
 }
 
-export default function ProfileSettings({ user, onUpdateCategories }) {
-  const { updateProfile } = useAuth();
+export default function ProfileSettings({ user, onUpdateCategories, onUpdateProfile, onChangePassword }) {
   const [form, setForm] = useState({
     displayName: user?.displayName || '',
     bio: user?.bio || '',
@@ -84,7 +81,7 @@ export default function ProfileSettings({ user, onUpdateCategories }) {
       const displayName = form.displayName.trim();
       const bio = form.bio.trim();
 
-      await updateProfile({ displayName, bio, avatarUrl });
+      await onUpdateProfile({ displayName, bio, avatarUrl });
       setForm(f => ({ ...f, avatarUrl }));
       setFile(null);
       setMessage('保存成功');
@@ -191,7 +188,7 @@ export default function ProfileSettings({ user, onUpdateCategories }) {
         <>
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">修改密码</h2>
-            <PasswordChangeForm />
+            <PasswordChangeForm onChangePassword={onChangePassword} />
           </div>
           <UserSettings user={user} onUpdateCategories={onUpdateCategories} />
         </>

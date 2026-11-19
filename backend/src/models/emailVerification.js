@@ -16,7 +16,7 @@ export function findVerificationToken(token) {
   const db = getDb();
   const stmt = db.prepare(`
     SELECT * FROM email_verification_tokens
-    WHERE token = ? AND usedAt IS NULL AND expiresAt > datetime('now')
+    WHERE token = ? AND expiresAt > datetime('now')
   `);
   return stmt.get(token) || null;
 }
@@ -31,8 +31,8 @@ export function markVerificationTokenUsed(token) {
   stmt.run(token);
 }
 
-export function deleteUserVerificationTokens(userId) {
+export function deleteVerificationToken(token) {
   const db = getDb();
-  const stmt = db.prepare('DELETE FROM email_verification_tokens WHERE userId = ?');
-  stmt.run(userId);
+  const stmt = db.prepare('DELETE FROM email_verification_tokens WHERE token = ?');
+  stmt.run(token);
 }

@@ -1,11 +1,12 @@
+import { withWriteTransaction } from '../db.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
 import { createUser, findUserByEmail, findUserById, isWechatUser, updateUserPassword, setEmailVerified } from '../models/user.js';
 import { getUserCategories, setUserCategories } from '../models/userCategory.js';
 import { generateToken, authMiddleware, getUserRole } from '../middleware/auth.js';
-import { createVerificationToken, findVerificationToken, markVerificationTokenUsed, deleteUserVerificationTokens } from '../models/emailVerification.js';
-import { createPasswordResetToken, findPasswordResetToken, markPasswordResetTokenUsed } from '../models/passwordReset.js';
+import { createVerificationToken, findVerificationToken, markVerificationTokenUsed, deleteVerificationToken } from '../models/emailVerification.js';
+import { createPasswordResetToken, findPasswordResetToken, invalidatePasswordResetTokens, resetPasswordWithToken } from '../models/passwordReset.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/mailer.js';
 import { CATEGORY_NAMES } from '../constants/categories.js';
 
@@ -184,21 +185,28 @@ router.get('/me', authMiddleware, (req, res, next) => {
 router.post('/verify-email', async (req, res, next) => {
   try {
     const { token } = req.body;
-    if (!token) {
+    if (typeof token !== 'string' || !token) {
       const err = new Error('Token is required');
       err.statusCode = 400;
       err.code = 1026;
       throw err;
     }
-    const record = findVerificationToken(token);
-    if (!record) {
+    const verified = withWriteTransaction(() => {
+      const record = findVerificationToken(token);
+      if (!record) return false;
+
+      if (!record.usedAt) {
+        setEmailVerified(record.userId);
+        markVerificationTokenUsed(token);
+      }
+      return true;
+    });
+    if (!verified) {
       const err = new Error('Invalid or expired verification token');
       err.statusCode = 400;
       err.code = 1020;
       throw err;
     }
-    setEmailVerified(record.userId);
-    markVerificationTokenUsed(token);
     res.sendJson(0, 'Email verified successfully');
   } catch (err) { next(err); }
 });
@@ -218,12 +226,13 @@ router.post('/resend-verification', authMiddleware, async (req, res, next) => {
       err.code = 1021;
       throw err;
     }
-    deleteUserVerificationTokens(user.id);
     const token = createVerificationToken(user.id);
     try {
       await sendVerificationEmail(user.email, token);
     } catch (emailErr) {
-      console.error('Failed to send verification email:', emailErr.message);
+      deleteVerificationToken(token);
+      console.error('Failed to resend verification email:', emailErr.code || 'SMTP_ERROR');
+      throw Object.assign(new Error('验证邮件发送失败，请稍后重试'), { statusCode: 503 });
     }
     res.sendJson(0, 'Verification email sent');
   } catch (err) { next(err); }
@@ -237,7 +246,11 @@ router.post('/forgot-password', async (req, res, next) => {
       const user = findUserByEmail(normalizedEmail);
       if (user) {
         const token = createPasswordResetToken(user.id);
-        await sendPasswordResetEmail(user.email, token);
+        try {
+          await sendPasswordResetEmail(user.email, token);
+        } catch (emailErr) {
+          console.error('Failed to send password reset email:', emailErr.message);
+        }
       }
     }
     res.sendJson(0, 'If the email is registered, a reset link has been sent');
@@ -247,22 +260,19 @@ router.post('/forgot-password', async (req, res, next) => {
 router.post('/reset-password', async (req, res, next) => {
   try {
     const { token, password } = req.body;
-    if (!token || !validatePassword(password)) {
+    if (typeof token !== 'string' || !token || !validatePassword(password)) {
       const err = new Error('Invalid token or password');
       err.statusCode = 400;
       err.code = 1027;
       throw err;
     }
-    const record = findPasswordResetToken(token);
-    if (!record) {
-      const err = new Error('Invalid or expired reset token');
-      err.statusCode = 400;
-      err.code = 1022;
-      throw err;
-    }
+    const resetError = () => Object.assign(new Error('Invalid or expired reset token'), {
+      statusCode: 400,
+      code: 1022
+    });
+    if (!findPasswordResetToken(token)) throw resetError();
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    updateUserPassword(record.userId, passwordHash);
-    markPasswordResetTokenUsed(token);
+    if (!resetPasswordWithToken(token, passwordHash)) throw resetError();
     res.sendJson(0, 'Password reset successfully');
   } catch (err) { next(err); }
 });
@@ -270,14 +280,14 @@ router.post('/reset-password', async (req, res, next) => {
 router.put('/change-password', authMiddleware, async (req, res, next) => {
   try {
     const { oldPassword, newPassword } = req.body;
-    if (!oldPassword || !validatePassword(newPassword)) {
+    if (typeof oldPassword !== 'string' || !oldPassword || !validatePassword(newPassword)) {
       const err = new Error('Invalid password');
       err.statusCode = 400;
       err.code = 1027;
       throw err;
     }
     const user = findUserById(req.userId);
-    const valid = await bcrypt.compare(oldPassword, user.passwordHash);
+    const valid = user && await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) {
       const err = new Error('Invalid old password');
       err.statusCode = 401;
@@ -285,7 +295,13 @@ router.put('/change-password', authMiddleware, async (req, res, next) => {
       throw err;
     }
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    updateUserPassword(user.id, passwordHash);
+    withWriteTransaction(() => {
+      if (findUserById(user.id)?.passwordHash !== user.passwordHash) {
+        throw Object.assign(new Error('Invalid old password'), { statusCode: 401, code: 1009 });
+      }
+      updateUserPassword(user.id, passwordHash);
+      invalidatePasswordResetTokens(user.id);
+    });
     res.sendJson(0, 'Password changed successfully');
   } catch (err) { next(err); }
 });

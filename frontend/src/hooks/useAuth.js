@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api.js';
 
 const TOKEN_KEY = 'news-auth-token';
@@ -46,42 +46,74 @@ function setStoredUser(user) {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState(getStoredUser);
+  const [user, setUser] = useState(() => getStoredToken() ? getStoredUser() : null);
   const [token, setToken] = useState(getStoredToken);
   const [isLoading, setIsLoading] = useState(true);
+  const session = useRef({ token, user });
+  const refreshSequence = useRef(0);
 
-  const loadUser = useCallback(async () => {
-    const storedToken = getStoredToken();
-    if (!storedToken) {
+  const saveSession = useCallback((nextToken, nextUser) => {
+    session.current = { token: nextToken, user: nextUser };
+    setToken(nextToken);
+    setUser(nextUser);
+    setStoredToken(nextToken);
+    setStoredUser(nextUser);
+    setIsLoading(false);
+  }, []);
+
+  const logout = useCallback(() => saveSession(null, null), [saveSession]);
+
+  const refreshUser = useCallback(async () => {
+    const current = session.current;
+    const sequence = ++refreshSequence.current;
+    const isCurrent = () => session.current === current && refreshSequence.current === sequence;
+    if (!current.token) {
       setIsLoading(false);
       return;
     }
 
-    setToken(storedToken);
     try {
-      const data = await api.getMe();
-      setUser(data.user);
-      setStoredUser(data.user);
+      const { user: refreshed } = await api.getMe();
+      if (isCurrent()) saveSession(current.token, refreshed);
     } catch (err) {
-      console.error('Failed to load user:', err);
-      logout();
+      if (!isCurrent()) return;
+      if (err.status === 401 || err.status === 404) logout();
+      throw err;
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [logout, saveSession]);
 
   useEffect(() => {
-    loadUser();
-  }, [loadUser]);
+    refreshUser().catch(() => {});
+  }, [refreshUser]);
 
-  const handleAuthResponse = useCallback((data) => {
-    const { user, token } = data;
-    setUser(user);
-    setToken(token);
-    setStoredToken(token);
-    setStoredUser(user);
+  useEffect(() => {
+    const recheckVerification = () => {
+      if (document.visibilityState === 'visible' && session.current.user && !session.current.user.emailVerified) {
+        refreshUser().catch(() => {});
+      }
+    };
+    const syncVerification = event => {
+      const current = session.current;
+      if (event.key !== USER_KEY || !current.user || current.user.emailVerified) return;
+      const stored = getStoredUser();
+      if (stored?.id === current.user.id && stored.emailVerified && getStoredToken() === current.token) {
+        refreshUser().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', recheckVerification);
+    window.addEventListener('storage', syncVerification);
+    return () => {
+      document.removeEventListener('visibilitychange', recheckVerification);
+      window.removeEventListener('storage', syncVerification);
+    };
+  }, [refreshUser]);
+
+  const handleAuthResponse = useCallback(({ user, token }) => {
+    saveSession(token, user);
     return user;
-  }, []);
+  }, [saveSession]);
 
   const login = useCallback(async ({ email, password, adminLogin }) => {
     const data = await api.login({ email, password, adminLogin });
@@ -99,32 +131,27 @@ export function useAuth() {
     return data.returnTo;
   }, [handleAuthResponse]);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    setToken(null);
-    setStoredToken(null);
-    setStoredUser(null);
-  }, []);
-
   const updateCategories = useCallback(async (categories) => {
+    const { token: activeToken } = session.current;
     const data = await api.setUserCategories(categories);
-    const updated = { ...user, categories: data.categories };
-    setUser(updated);
-    setStoredUser(updated);
+    if (session.current.token === activeToken) {
+      saveSession(activeToken, { ...session.current.user, categories: data.categories });
+    }
     return data.categories;
-  }, [user]);
+  }, [saveSession]);
 
   const changePassword = useCallback(async (oldPassword, newPassword) => {
     await api.changePassword(oldPassword, newPassword);
   }, []);
 
   const updateProfile = useCallback(async (profile) => {
+    const { token: activeToken } = session.current;
     const data = await api.updateProfile(profile);
-    const updated = { ...user, ...data.user };
-    setUser(updated);
-    setStoredUser(updated);
-    return updated;
-  }, [user]);
+    if (session.current.token === activeToken) {
+      saveSession(activeToken, { ...session.current.user, ...data.user });
+    }
+    return data.user;
+  }, [saveSession]);
 
   return {
     user,
@@ -135,6 +162,7 @@ export function useAuth() {
     wechatLogin,
     register,
     logout,
+    refreshUser,
     updateCategories,
     changePassword,
     updateProfile
