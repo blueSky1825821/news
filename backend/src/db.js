@@ -245,6 +245,21 @@ export function initSchema(db) {
   if (!hasHeadlinesColumn) {
     db.exec(`ALTER TABLE articles ADD COLUMN headlines TEXT`);
   }
+
+  const hasDisplayName = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('users') WHERE name = 'displayName'`).get().count > 0;
+  if (!hasDisplayName) {
+    db.exec(`ALTER TABLE users ADD COLUMN displayName TEXT`);
+  }
+
+  const hasBio = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('users') WHERE name = 'bio'`).get().count > 0;
+  if (!hasBio) {
+    db.exec(`ALTER TABLE users ADD COLUMN bio TEXT`);
+  }
+
+  const hasAvatarUrl = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('users') WHERE name = 'avatarUrl'`).get().count > 0;
+  if (!hasAvatarUrl) {
+    db.exec(`ALTER TABLE users ADD COLUMN avatarUrl TEXT`);
+  }
 }
 
 let dbInstance = null;

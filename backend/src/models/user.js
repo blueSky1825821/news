@@ -39,7 +39,7 @@ export function findUserByEmail(email) {
 
 export function findUserById(id) {
   const db = getDb();
-  const stmt = db.prepare('SELECT id, email, passwordHash, emailVerified, createdAt, updatedAt FROM users WHERE id = ?');
+  const stmt = db.prepare('SELECT id, email, passwordHash, emailVerified, displayName, bio, avatarUrl, createdAt, updatedAt FROM users WHERE id = ?');
   return stmt.get(id) || null;
 }
 
@@ -61,4 +61,27 @@ export function setEmailVerified(userId) {
     WHERE id = ?
   `);
   stmt.run(userId);
+}
+
+export function updateUserProfile(userId, { displayName, bio, avatarUrl }) {
+  const db = getDb();
+  const fields = [];
+  const values = [];
+  if (displayName !== undefined) {
+    fields.push('displayName = ?');
+    values.push(displayName);
+  }
+  if (bio !== undefined) {
+    fields.push('bio = ?');
+    values.push(bio);
+  }
+  if (avatarUrl !== undefined) {
+    fields.push('avatarUrl = ?');
+    values.push(avatarUrl);
+  }
+  if (fields.length === 0) return;
+  fields.push("updatedAt = datetime('now')");
+  values.push(userId);
+  const stmt = db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`);
+  stmt.run(...values);
 }
