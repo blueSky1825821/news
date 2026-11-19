@@ -158,6 +158,69 @@ export function initSchema(db) {
       errorMessage TEXT,
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      expiresAt DATETIME NOT NULL,
+      usedAt DATETIME,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_token ON email_verification_tokens(token);
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_userId ON email_verification_tokens(userId);
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      expiresAt DATETIME NOT NULL,
+      usedAt DATETIME,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+
+    CREATE TABLE IF NOT EXISTS article_likes (
+      userId INTEGER NOT NULL,
+      articleId INTEGER NOT NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (userId, articleId),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (articleId) REFERENCES articles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_article_likes_articleId ON article_likes(articleId);
+
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      articleId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      parentId INTEGER,
+      isDeleted BOOLEAN NOT NULL DEFAULT 0,
+      reportCount INTEGER NOT NULL DEFAULT 0,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (articleId) REFERENCES articles(id) ON DELETE CASCADE,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (parentId) REFERENCES comments(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_comments_articleId ON comments(articleId);
+    CREATE INDEX IF NOT EXISTS idx_comments_userId ON comments(userId);
+    CREATE INDEX IF NOT EXISTS idx_comments_parentId ON comments(parentId);
+
+    CREATE TABLE IF NOT EXISTS comment_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      commentId INTEGER NOT NULL,
+      reporterId INTEGER NOT NULL,
+      reason TEXT,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (commentId) REFERENCES comments(id) ON DELETE CASCADE,
+      FOREIGN KEY (reporterId) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(commentId, reporterId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_comment_reports_commentId ON comment_reports(commentId);
   `);
 
   // Migration: add columns to existing tables

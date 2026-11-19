@@ -17,6 +17,17 @@ export function adminMiddleware(req, res, next) {
   next();
 }
 
+export function verifiedEmailMiddleware(req, res, next) {
+  const user = findUserById(req.userId);
+  if (!user || !user.emailVerified) {
+    const err = new Error('Please verify your email to perform this action');
+    err.statusCode = 403;
+    err.code = 1023;
+    return next(err);
+  }
+  next();
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'news-app-dev-secret-change-in-production';
 if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
   throw new Error('生产环境必须配置至少 32 个字符的 JWT_SECRET');

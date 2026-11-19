@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
-import { createUser, findUserByEmail, findUserById, isWechatUser } from '../models/user.js';
+import { createUser, findUserByEmail, findUserById, isWechatUser, updateUserPassword, setEmailVerified } from '../models/user.js';
 import { getUserCategories, setUserCategories } from '../models/userCategory.js';
 import { generateToken, authMiddleware, getUserRole } from '../middleware/auth.js';
+import { createVerificationToken, findVerificationToken, markVerificationTokenUsed, deleteUserVerificationTokens } from '../models/emailVerification.js';
+import { createPasswordResetToken, findPasswordResetToken, markPasswordResetTokenUsed } from '../models/passwordReset.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../services/mailer.js';
 import { CATEGORY_NAMES } from '../constants/categories.js';
 
 const router = Router();
@@ -60,6 +63,14 @@ router.post('/register', async (req, res, next) => {
     }
 
     const user = findUserById(userId);
+
+    try {
+      const verificationToken = createVerificationToken(userId);
+      await sendVerificationEmail(user.email, verificationToken);
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr.message);
+    }
+
     const token = generateToken({ userId: user.id, email: user.email });
 
     res.sendJson(0, 'User registered', {
@@ -147,12 +158,118 @@ router.get('/me', authMiddleware, (req, res, next) => {
         email: user.email,
         role: getUserRole(user),
         displayName: isWechatUser(user.id) ? '微信用户' : user.email,
-        categories
+        categories,
+        emailVerified: user.emailVerified
       }
     });
   } catch (err) {
     next(err);
   }
+});
+
+router.post('/verify-email', async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      const err = new Error('Token is required');
+      err.statusCode = 400;
+      err.code = 1026;
+      throw err;
+    }
+    const record = findVerificationToken(token);
+    if (!record) {
+      const err = new Error('Invalid or expired verification token');
+      err.statusCode = 400;
+      err.code = 1020;
+      throw err;
+    }
+    setEmailVerified(record.userId);
+    markVerificationTokenUsed(token);
+    res.sendJson(0, 'Email verified successfully');
+  } catch (err) { next(err); }
+});
+
+router.post('/resend-verification', authMiddleware, async (req, res, next) => {
+  try {
+    const user = findUserById(req.userId);
+    if (!user) {
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      err.code = 1010;
+      throw err;
+    }
+    if (user.emailVerified) {
+      const err = new Error('Email already verified');
+      err.statusCode = 400;
+      err.code = 1021;
+      throw err;
+    }
+    deleteUserVerificationTokens(user.id);
+    const token = createVerificationToken(user.id);
+    await sendVerificationEmail(user.email, token);
+    res.sendJson(0, 'Verification email sent');
+  } catch (err) { next(err); }
+});
+
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (email && validateEmail(email)) {
+      const normalizedEmail = validator.normalizeEmail(email);
+      const user = findUserByEmail(normalizedEmail);
+      if (user) {
+        const token = createPasswordResetToken(user.id);
+        await sendPasswordResetEmail(user.email, token);
+      }
+    }
+    res.sendJson(0, 'If the email is registered, a reset link has been sent');
+  } catch (err) { next(err); }
+});
+
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !validatePassword(password)) {
+      const err = new Error('Invalid token or password');
+      err.statusCode = 400;
+      err.code = 1027;
+      throw err;
+    }
+    const record = findPasswordResetToken(token);
+    if (!record) {
+      const err = new Error('Invalid or expired reset token');
+      err.statusCode = 400;
+      err.code = 1022;
+      throw err;
+    }
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    updateUserPassword(record.userId, passwordHash);
+    markPasswordResetTokenUsed(token);
+    res.sendJson(0, 'Password reset successfully');
+  } catch (err) { next(err); }
+});
+
+router.put('/change-password', authMiddleware, async (req, res, next) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !validatePassword(newPassword)) {
+      const err = new Error('Invalid password');
+      err.statusCode = 400;
+      err.code = 1027;
+      throw err;
+    }
+    const user = findUserById(req.userId);
+    const valid = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!valid) {
+      const err = new Error('Invalid old password');
+      err.statusCode = 401;
+      err.code = 1009;
+      throw err;
+    }
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    updateUserPassword(user.id, passwordHash);
+    res.sendJson(0, 'Password changed successfully');
+  } catch (err) { next(err); }
 });
 
 export default router;

@@ -39,6 +39,26 @@ export function findUserByEmail(email) {
 
 export function findUserById(id) {
   const db = getDb();
-  const stmt = db.prepare('SELECT id, email, emailVerified, createdAt, updatedAt FROM users WHERE id = ?');
+  const stmt = db.prepare('SELECT id, email, passwordHash, emailVerified, createdAt, updatedAt FROM users WHERE id = ?');
   return stmt.get(id) || null;
+}
+
+export function updateUserPassword(userId, passwordHash) {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE users
+    SET passwordHash = ?, updatedAt = datetime('now')
+    WHERE id = ?
+  `);
+  stmt.run(passwordHash, userId);
+}
+
+export function setEmailVerified(userId) {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE users
+    SET emailVerified = 1, updatedAt = datetime('now')
+    WHERE id = ?
+  `);
+  stmt.run(userId);
 }
