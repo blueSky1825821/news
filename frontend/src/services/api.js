@@ -2,10 +2,11 @@
 
 async function request(url, options = {}) {
   const token = localStorage.getItem('news-auth-token');
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(BASE_URL + url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
@@ -252,5 +253,24 @@ export const api = {
   },
   getHotSidebar(range = 'today') {
     return request(`/api/articles/hot-sidebar?range=${range}`);
+  },
+
+  // Profile
+  getProfile() {
+    return request('/api/users/profile');
+  },
+  updateProfile(profile) {
+    return request('/api/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile)
+    });
+  },
+  uploadAvatar(file) {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return request('/api/users/avatar', {
+      method: 'POST',
+      body: formData
+    });
   }
 };
