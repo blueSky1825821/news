@@ -118,6 +118,14 @@ export function useAuth() {
     await api.changePassword(oldPassword, newPassword);
   }, []);
 
+  const updateProfile = useCallback(async (profile) => {
+    const data = await api.updateProfile(profile);
+    const updated = { ...user, ...data.user };
+    setUser(updated);
+    setStoredUser(updated);
+    return updated;
+  }, [user]);
+
   return {
     user,
     token,
@@ -128,6 +136,7 @@ export function useAuth() {
     register,
     logout,
     updateCategories,
-    changePassword
+    changePassword,
+    updateProfile
   };
 }
