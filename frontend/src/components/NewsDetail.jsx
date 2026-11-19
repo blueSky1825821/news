@@ -2,6 +2,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../services/api.js';
+import LikeButton from './LikeButton.jsx';
+import CommentSection from './CommentSection.jsx';
 
 const ALLOWED_TAGS = [
   'p', 'br', 'img', 'a', 'h1', 'h2', 'h3',
@@ -40,7 +42,7 @@ function extractPlainText(html) {
   return div.textContent || div.innerText || '';
 }
 
-export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnabled = false }) {
+export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSendEnabled = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [article, setArticle] = useState(null);
@@ -243,6 +245,12 @@ export default function NewsDetail({ onPlaySingle, isAdmin = false, massSendEnab
           </div>
         </details>
       )}
+
+      <div className="mt-6 flex items-center gap-4">
+        <LikeButton articleId={article.id} user={user} />
+      </div>
+
+      <CommentSection articleId={article.id} user={user} />
     </div>
   );
 }

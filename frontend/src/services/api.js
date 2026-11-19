@@ -190,5 +190,67 @@ export const api = {
   },
   getXinwenlianboConfig() {
     return request('/api/xinwenlianbo/config');
+  },
+
+  // Email verification & password
+  verifyEmail(token) {
+    return request('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+  },
+  resendVerification() {
+    return request('/api/auth/resend-verification', { method: 'POST' });
+  },
+  forgotPassword(email) {
+    return request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  },
+  resetPassword(token, password) {
+    return request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+  },
+  changePassword(oldPassword, newPassword) {
+    return request('/api/auth/change-password', {
+      method: 'PUT',
+      body: JSON.stringify({ oldPassword, newPassword })
+    });
+  },
+
+  // Likes
+  toggleLike(articleId) {
+    return request(`/api/articles/${articleId}/likes`, { method: 'POST' });
+  },
+  getLikes(articleId, page = 1, limit = 20) {
+    return request(`/api/articles/${articleId}/likes?page=${page}&limit=${limit}`);
+  },
+  hasLiked(articleId) {
+    return request(`/api/articles/${articleId}/likes/liked`);
+  },
+
+  // Comments
+  postComment(articleId, content) {
+    return request(`/api/articles/${articleId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
+  },
+  postReply(commentId, content) {
+    return request(`/api/comments/${commentId}/reply`, { method: 'POST', body: JSON.stringify({ content }) });
+  },
+  getComments(articleId) {
+    return request(`/api/articles/${articleId}/comments`);
+  },
+  deleteComment(commentId) {
+    return request(`/api/comments/${commentId}`, { method: 'DELETE' });
+  },
+  reportComment(commentId, reason) {
+    return request(`/api/comments/${commentId}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+  },
+  getReportedComments() {
+    return request('/api/comments/reported');
+  },
+  clearCommentReports(commentId) {
+    return request(`/api/comments/${commentId}/clear-reports`, { method: 'POST' });
+  },
+
+  // Hot ranking
+  getHotArticles(range = 'today', page = 1, limit = 20) {
+    return request(`/api/articles/hot?range=${range}&page=${page}&limit=${limit}`);
+  },
+  getHotSidebar(range = 'today') {
+    return request(`/api/articles/hot-sidebar?range=${range}`);
   }
 };

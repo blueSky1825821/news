@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import NewsCard from './NewsCard.jsx';
 import SourceFilter from './SourceFilter.jsx';
+import HotSidebar from './HotSidebar.jsx';
 
 export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, user, isAdmin = false }) {
   const [articles, setArticles] = useState([]);
@@ -98,6 +99,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
     <NewsCard
       key={article.id}
       article={article}
+      user={user}
       isAdmin={isAdmin}
       isActive={activeArticleId === article.id}
       variant={variant}
@@ -106,7 +108,8 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
   );
 
   return (
-    <div>
+    <div className="flex gap-6">
+      <div className="flex-1 min-w-0">
       <section className="news-interests" aria-label="兴趣分类">
         <div className="news-interests-label">
           <h2>兴趣分类</h2>
@@ -189,6 +192,8 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
           </>
         )}
       </div>
+      </div>
+      <HotSidebar />
     </div>
   );
 }

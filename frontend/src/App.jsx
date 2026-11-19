@@ -15,6 +15,11 @@ import AutoPlayBar from './components/AutoPlayBar.jsx';
 import WechatLogin from './components/WechatLogin.jsx';
 import PushNews from './components/PushNews.jsx';
 import PortalNav from './components/PortalNav.jsx';
+import EmailVerificationBanner from './components/EmailVerificationBanner.jsx';
+import ForgotPassword from './components/ForgotPassword.jsx';
+import ResetPassword from './components/ResetPassword.jsx';
+import HotNews from './components/HotNews.jsx';
+import CommentManager from './components/CommentManager.jsx';
 import { api } from './services/api.js';
 
 function Navbar({ user, isLoading, onLogout }) {
@@ -132,6 +137,7 @@ export default function App() {
     <div className="min-h-screen pb-20">
       <Navbar user={user} isLoading={isLoading} onLogout={handleLogout} />
 
+      <EmailVerificationBanner user={user} />
       <main className="news-shell news-main">
         {!isSupported && <p className="mb-4 text-sm text-gray-500">当前浏览器不支持语音播报，可以正常阅读新闻。</p>}
         <Routes>
@@ -149,7 +155,7 @@ export default function App() {
           />
           <Route
             path="/article/:id"
-            element={<NewsDetail onPlaySingle={playSingle} isAdmin={!isLoading && user?.role === 'admin'} massSendEnabled={massSendEnabled} />}
+            element={<NewsDetail user={user} onPlaySingle={playSingle} isAdmin={!isLoading && user?.role === 'admin'} massSendEnabled={massSendEnabled} />}
           />
           <Route path="/sources" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <SourceManager /> : <Navigate to={user ? '/' : '/login'} replace />} />
           <Route
@@ -169,7 +175,11 @@ export default function App() {
           <Route path="/push/:id" element={<PushNews user={user} isLoading={isLoading} />} />
           <Route path="/today" element={<TodayNews activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} />} />
           <Route path="/portal" element={<PortalNav />} />
+          <Route path="/hot" element={<HotNews />} />
           <Route path="/login" element={<LoginForm onLogin={login} />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/comment-manager" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <CommentManager /> : <Navigate to={user ? '/' : '/login'} replace />} />
           <Route
             path="/register"
             element={<RegisterForm onRegister={register} />}

@@ -1,6 +1,23 @@
 import UserSettings from './UserSettings.jsx';
+import { useAuth } from '../hooks/useAuth.js';
 
 export default function TtsSettings({ settings, onChange, user, onUpdateCategories, voices = [] }) {
+  const { changePassword } = useAuth();
+  const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirm: '' });
+  const [pwMessage, setPwMessage] = useState('');
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwForm.newPassword !== pwForm.confirm) { setPwMessage('两次密码不一致'); return; }
+    if (pwForm.newPassword.length < 8) { setPwMessage('密码至少8位'); return; }
+    try {
+      await changePassword(pwForm.oldPassword, pwForm.newPassword);
+      setPwMessage('密码修改成功');
+      setPwForm({ oldPassword: '', newPassword: '', confirm: '' });
+    } catch (err) {
+      setPwMessage(err.message);
+    }
+  };
   const chineseVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith('zh'));
   const selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
 
@@ -124,7 +141,19 @@ export default function TtsSettings({ settings, onChange, user, onUpdateCategori
       </div>
 
       {user && (
-        <UserSettings user={user} onUpdateCategories={onUpdateCategories} />
+        <>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">修改密码</h3>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <input type="password" value={pwForm.oldPassword} onChange={e => setPwForm(p => ({ ...p, oldPassword: e.target.value }))} placeholder="旧密码" required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+              <input type="password" value={pwForm.newPassword} onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="新密码（至少8位）" required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+              <input type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} placeholder="确认新密码" required className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+              <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">修改密码</button>
+              {pwMessage && <p className="text-sm text-gray-600">{pwMessage}</p>}
+            </form>
+          </div>
+          <UserSettings user={user} onUpdateCategories={onUpdateCategories} />
+        </>
       )}
     </div>
   );

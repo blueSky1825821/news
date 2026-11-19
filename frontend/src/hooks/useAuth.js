@@ -114,6 +114,10 @@ export function useAuth() {
     return data.categories;
   }, [user]);
 
+  const changePassword = useCallback(async (oldPassword, newPassword) => {
+    await api.changePassword(oldPassword, newPassword);
+  }, []);
+
   return {
     user,
     token,
@@ -123,6 +127,7 @@ export function useAuth() {
     wechatLogin,
     register,
     logout,
-    updateCategories
+    updateCategories,
+    changePassword
   };
 }

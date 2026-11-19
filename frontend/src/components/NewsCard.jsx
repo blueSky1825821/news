@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import LikeButton from './LikeButton.jsx';
 
-export default function NewsCard({ article, isActive, onPlay, isAdmin = false, variant = 'standard' }) {
+export default function NewsCard({ article, isActive, onPlay, isAdmin = false, variant = 'standard', user }) {
   const [isFlagged, setIsFlagged] = useState(false);
 
   useEffect(() => {
@@ -50,11 +51,14 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
         )}
       </div>
       {variant !== 'brief' && article.summary && <p className="news-story-summary">{article.summary}</p>}
-      {onPlay && (
-        <button onClick={() => onPlay(article)} className="news-listen" aria-label={`播报 ${article.title}`}>
-          <span aria-hidden="true">▶</span> {isActive ? '播放中' : '播报'}
-        </button>
-      )}
+      <div className="flex items-center gap-3 mt-2">
+        <LikeButton articleId={article.id} user={user} />
+        {onPlay && (
+          <button onClick={() => onPlay(article)} className="news-listen" aria-label={`播报 ${article.title}`}>
+            <span aria-hidden="true">▶</span> {isActive ? '播放中' : '播报'}
+          </button>
+        )}
+      </div>
     </article>
   );
 }
