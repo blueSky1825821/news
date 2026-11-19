@@ -24,7 +24,7 @@ export function hasLiked(userId, articleId) {
 export function getLikeUsers(articleId, limit = 20, offset = 0) {
   const db = getDb();
   const users = db.prepare(`
-    SELECT u.id, u.email
+    SELECT u.id, u.displayName, u.email
     FROM article_likes al
     JOIN users u ON al.userId = u.id
     WHERE al.articleId = ?

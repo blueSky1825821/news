@@ -24,7 +24,7 @@ router.post('/articles/:id/comments', authMiddleware, verifiedEmailMiddleware, a
       isDeleted: !!comment.isDeleted,
       reportCount: comment.reportCount,
       createdAt: comment.createdAt,
-      user: { id: comment.userId, displayName: comment.userEmail }
+      user: { id: comment.userId, displayName: comment.userDisplayName || comment.userEmail?.split('@')[0] || '未知用户' }
     });
   } catch (err) { next(err); }
 });
@@ -56,7 +56,7 @@ router.post('/comments/:id/reply', authMiddleware, verifiedEmailMiddleware, asyn
       isDeleted: !!reply.isDeleted,
       reportCount: reply.reportCount,
       createdAt: reply.createdAt,
-      user: { id: reply.userId, displayName: reply.userEmail }
+      user: { id: reply.userId, displayName: reply.userDisplayName || reply.userEmail?.split('@')[0] || '未知用户' }
     });
   } catch (err) { next(err); }
 });
@@ -71,13 +71,13 @@ router.get('/articles/:id/comments', async (req, res, next) => {
       isDeleted: !!c.isDeleted,
       reportCount: c.reportCount,
       createdAt: c.createdAt,
-      user: { id: c.userId, displayName: c.userEmail },
+      user: { id: c.userId, displayName: c.userDisplayName || c.userEmail?.split('@')[0] || '未知用户' },
       replies: (c.replies || []).map(r => ({
         id: r.id,
         content: r.content,
         isDeleted: !!r.isDeleted,
         createdAt: r.createdAt,
-        user: { id: r.userId, displayName: r.userEmail }
+        user: { id: r.userId, displayName: r.userDisplayName || r.userEmail?.split('@')[0] || '未知用户' }
       }))
     })) });
   } catch (err) { next(err); }

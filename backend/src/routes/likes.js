@@ -21,7 +21,7 @@ router.get('/', async (req, res, next) => {
     const offset = (page - 1) * limit;
     const { users, total } = getLikeUsers(articleId, limit, offset);
     res.sendJson(0, 'success', {
-      users: users.map(u => ({ id: u.id, displayName: u.email })),
+      users: users.map(u => ({ id: u.id, displayName: u.displayName || u.email?.split('@')[0] || '未知用户' })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     });
   } catch (err) { next(err); }

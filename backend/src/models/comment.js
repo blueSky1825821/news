@@ -13,7 +13,7 @@ export function createComment({ articleId, userId, content, parentId = null }) {
 export function findCommentById(id) {
   const db = getDb();
   return db.prepare(`
-    SELECT c.*, u.email as userEmail
+    SELECT c.*, u.displayName as userDisplayName, u.email as userEmail
     FROM comments c
     JOIN users u ON c.userId = u.id
     WHERE c.id = ?
@@ -23,7 +23,7 @@ export function findCommentById(id) {
 export function getArticleComments(articleId) {
   const db = getDb();
   const topComments = db.prepare(`
-    SELECT c.*, u.email as userEmail
+    SELECT c.*, u.displayName as userDisplayName, u.email as userEmail
     FROM comments c
     JOIN users u ON c.userId = u.id
     WHERE c.articleId = ? AND c.parentId IS NULL
@@ -32,7 +32,7 @@ export function getArticleComments(articleId) {
 
   for (const comment of topComments) {
     comment.replies = db.prepare(`
-      SELECT c.*, u.email as userEmail
+      SELECT c.*, u.displayName as userDisplayName, u.email as userEmail
       FROM comments c
       JOIN users u ON c.userId = u.id
       WHERE c.parentId = ?
@@ -56,7 +56,7 @@ export function reportComment(commentId, reporterId, reason) {
 export function getReportedComments() {
   const db = getDb();
   return db.prepare(`
-    SELECT c.*, u.email as userEmail
+    SELECT c.*, u.displayName as userDisplayName, u.email as userEmail
     FROM comments c
     JOIN users u ON c.userId = u.id
     WHERE c.reportCount > 0 AND c.isDeleted = 0

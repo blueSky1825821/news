@@ -6,7 +6,7 @@ import { useAuth } from './hooks/useAuth.js';
 import NewsList from './components/NewsList.jsx';
 import NewsDetail from './components/NewsDetail.jsx';
 import SourceManager from './components/SourceManager.jsx';
-import TtsSettings from './components/TtsSettings.jsx';
+import SettingsPage from './components/SettingsPage.jsx';
 import LoginForm from './components/LoginForm.jsx';
 import RegisterForm from './components/RegisterForm.jsx';
 import WechatSettings from './components/WechatSettings.jsx';
@@ -40,7 +40,7 @@ function Navbar({ user, isLoading, onLogout }) {
           <div className="news-account">
             {user ? (
               <>
-                <span className="truncate">{user.displayName || user.email}</span>
+                <span className="truncate">{user.displayName || user.email?.split('@')[0] || user.email}</span>
                 <button className="shrink-0" onClick={onLogout}>退出登录</button>
               </>
             ) : (
@@ -161,7 +161,7 @@ export default function App() {
           <Route
             path="/settings"
             element={
-              <TtsSettings
+              <SettingsPage
                 settings={settings}
                 onChange={setSettings}
                 user={user}
