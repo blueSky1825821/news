@@ -28,6 +28,12 @@ function validateCategories(categories) {
   return categories.filter((c) => CATEGORY_NAMES.includes(c));
 }
 
+function getDisplayName(user) {
+  if (user.displayName) return user.displayName;
+  if (isWechatUser(user.id)) return '微信用户';
+  return user.email;
+}
+
 router.post('/register', async (req, res, next) => {
   try {
     const { email, password, categories } = req.body;
@@ -78,8 +84,11 @@ router.post('/register', async (req, res, next) => {
         id: user.id,
         email: user.email,
         role: getUserRole(user),
-        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
-        categories: selectedCategories
+        displayName: getDisplayName(user),
+        categories: selectedCategories,
+        bio: user.bio,
+        avatarUrl: user.avatarUrl,
+        emailVerified: user.emailVerified
       },
       token
     });
@@ -131,8 +140,11 @@ router.post('/login', async (req, res, next) => {
         id: user.id,
         email: user.email,
         role: getUserRole(user),
-        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
-        categories
+        displayName: getDisplayName(user),
+        categories,
+        bio: user.bio,
+        avatarUrl: user.avatarUrl,
+        emailVerified: user.emailVerified
       },
       token
     });
@@ -157,8 +169,10 @@ router.get('/me', authMiddleware, (req, res, next) => {
         id: user.id,
         email: user.email,
         role: getUserRole(user),
-        displayName: isWechatUser(user.id) ? '微信用户' : user.email,
+        displayName: getDisplayName(user),
         categories,
+        bio: user.bio,
+        avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified
       }
     });
