@@ -9,6 +9,23 @@ import AutoPlayBar from './components/AutoPlayBar.jsx';
 import EmailVerificationBanner from './components/EmailVerificationBanner.jsx';
 import { api } from './services/api.js';
 
+function articlePlayback(article, mode) {
+  if (mode !== 'full') return { title: article.title, summary: article.summary, mode };
+
+  const fullItem = (details) => {
+    const content = details.transcript || details.content;
+    if (!content?.trim()) throw new Error(`《${details.title}》暂无可播报的全文。`);
+    return { title: details.title, content, mode };
+  };
+  if ((article.transcript || article.content)?.trim()) return fullItem(article);
+  return {
+    async load(signal) {
+      const details = await api.getArticle(article.id, { signal });
+      return fullItem(details);
+    }
+  };
+}
+
 export default function App() {
   const { settings, setSettings } = useTtsSettings();
   const { user, isLoading, login, wechatLogin, register, logout, refreshUser, updateCategories, updateProfile, changePassword } = useAuth();
@@ -39,13 +56,15 @@ export default function App() {
     currentIndex,
     total,
     voices,
+    playbackError,
+    isLoadingArticle,
     playQueue,
     playSingle,
     pause,
     resume,
     stop,
     next
-  } = useSpeech({ rate: settings.rate, pitch: settings.pitch, voiceURI: settings.voiceURI });
+  } = useSpeech(settings);
 
   const [activeArticleId, setActiveArticleId] = useState(null);
   const playingArticlesRef = useRef([]);
@@ -61,16 +80,22 @@ export default function App() {
     }
   }, [currentIndex, total]);
 
-  const handlePlaySingle = (article, text) => {
+  const handlePlaySingle = (article, mode) => {
     playingArticlesRef.current = [article];
     setActiveArticleId(article.id);
-    playSingle(text);
+    playSingle(articlePlayback(article, mode));
   };
 
-  const handlePlayAll = (articles, texts) => {
+  const handlePlayAll = (articles, mode) => {
     playingArticlesRef.current = articles;
     setActiveArticleId(articles[0]?.id || null);
-    playQueue(texts);
+    playQueue(articles.map(article => articlePlayback(article, mode)));
+  };
+
+  const handlePlayText = (item) => {
+    playingArticlesRef.current = [];
+    setActiveArticleId(null);
+    playSingle(item);
   };
 
   const handleStop = () => {
@@ -91,9 +116,10 @@ export default function App() {
       <EmailVerificationBanner key={user?.id} user={user} />
       <main id="main-content" className="news-shell news-main" tabIndex={-1}>
         {!isSupported && <p className="mb-4 text-sm text-gray-500">当前浏览器不支持语音播报，可以正常阅读新闻。</p>}
+        {playbackError && <p className="mb-4 text-sm text-red-700" role="alert">{playbackError}</p>}
         <AppRoutes user={user} isLoading={isLoading} massSendEnabled={massSendEnabled}
           activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} onPlayAll={handlePlayAll}
-          onPlayText={playSingle} settings={settings} onChangeSettings={setSettings} voices={voices}
+          onPlayText={handlePlayText} settings={settings} onChangeSettings={setSettings} voices={voices}
           onUpdateCategories={updateCategories} onUpdateProfile={updateProfile} onChangePassword={changePassword}
           onLogin={login} onWechatLogin={wechatLogin} onVerify={refreshUser} onRegister={register} />
       </main>
@@ -102,6 +128,7 @@ export default function App() {
         currentIndex={currentIndex}
         total={total}
         isPlaying={isPlaying}
+        isLoadingArticle={isLoadingArticle}
         onPause={pause}
         onResume={resume}
         onNext={next}

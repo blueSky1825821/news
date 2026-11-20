@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 
-export default function AutoPlayBar({ currentIndex, total, isPlaying, onPause, onResume, onNext, onStop }) {
+export default function AutoPlayBar({ currentIndex, total, isPlaying, isLoadingArticle, onPause, onResume, onNext, onStop }) {
   if (total === 0) return null;
 
   return (
@@ -8,6 +8,7 @@ export default function AutoPlayBar({ currentIndex, total, isPlaying, onPause, o
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-medium text-gray-700">
           播报进度：{currentIndex + 1} / {total}
+          {isLoadingArticle && <span role="status" className="ml-2">正在加载全文…</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isPlaying ? (

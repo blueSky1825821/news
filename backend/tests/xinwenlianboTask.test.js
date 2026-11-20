@@ -17,7 +17,7 @@ jest.unstable_mockModule('../src/services/xinwenlianbo/transcriber.js', () => ({
 jest.unstable_mockModule('../src/services/xinwenlianbo/summarizer.js', () => ({ summarize }));
 
 const { getXinwenlianboDate, getXinwenlianboStatus, getXinwenlianboRecord, listXinwenlianboRecords,
-  startXinwenlianboSummary, startXinwenlianboTask, deleteXinwenlianboRecord } =
+  startXinwenlianboSummary, startXinwenlianboTask, deleteXinwenlianboRecord, cleanupExpiredXinwenlianboAudio } =
   await import('../src/services/xinwenlianbo/orchestrator.js');
 
 describe('Xinwenlianbo recording task', () => {
@@ -113,6 +113,45 @@ describe('Xinwenlianbo recording task', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it('clears only expired audio and keeps transcripts and published news', async () => {
+    const oldDate = '2025-06-01';
+    const { articleId } = await startXinwenlianboTask(oldDate, { durationMinutes: 1 }).completion;
+    const db = getDb();
+    const oldDir = mkdtempSync(join(tmpdir(), 'xinwenlianbo-'));
+    const recentDir = mkdtempSync(join(tmpdir(), 'xinwenlianbo-'));
+    const oldAudio = join(oldDir, 'recording.wav');
+    const recentAudio = join(recentDir, 'recording.wav');
+    try {
+      writeFileSync(oldAudio, 'old recording');
+      writeFileSync(recentAudio, 'recent recording');
+      db.prepare("UPDATE xinwenlianbo_tasks SET startedAt = '2025-06-01 00:00:00', audioFilePath = ? WHERE taskDate = ?")
+        .run(oldAudio, oldDate);
+      db.prepare(`
+        INSERT INTO xinwenlianbo_tasks (taskDate, status, startedAt, audioFilePath)
+        VALUES ('2025-06-02', 'completed', '2025-06-02 00:00:00', ?)
+      `).run(recentAudio);
+
+      const now = new Date('2025-06-17T00:00:00Z');
+      expect(cleanupExpiredXinwenlianboAudio(now)).toBe(1);
+      expect(cleanupExpiredXinwenlianboAudio(now)).toBe(0);
+      expect(existsSync(oldAudio)).toBe(false);
+      expect(existsSync(recentAudio)).toBe(true);
+      expect(db.prepare('SELECT audioFilePath, transcript FROM xinwenlianbo_tasks WHERE taskDate = ?').get(oldDate))
+        .toEqual({ audioFilePath: null, transcript: '测试转录' });
+      expect(db.prepare('SELECT id FROM articles WHERE id = ?').get(articleId)).toBeDefined();
+    } finally {
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(recentDir, { recursive: true, force: true });
+    }
+  });
+
+  it('extracts opening headlines when the recording has no configured summary model', async () => {
+    transcribe.mockResolvedValueOnce('各位好，今天新闻联播的主要内容有：第一条新闻。第二条新闻。第一条新闻。下面请看详细报道。其他正文。');
+    const { articleId } = await startXinwenlianboTask(getXinwenlianboDate(), { durationMinutes: 1 }).completion;
+    const { headlines } = getDb().prepare('SELECT headlines FROM articles WHERE id = ?').get(articleId);
+    expect(JSON.parse(headlines)).toEqual(['第一条新闻', '第二条新闻']);
   });
 
   it('deletes the generated news only on request and rolls back on an invalid audio path', async () => {

@@ -143,10 +143,17 @@ npm run dev
 npm run deploy
 ```
 
-执行流程：
-1. 安装并构建前端（输出到 `frontend/dist`）
-2. 安装后端生产依赖
-3. 启动后端服务（默认端口 3000）
+默认复用与各自 `package-lock.json` 一致的前端和后端依赖。依赖缺失或锁文件中的版本有变化时，自动用 `npm ci` 安装对应项目。每次仍会构建前端并启动后端服务。
+
+```bash
+# 仅重新安装前端和后端 npm 依赖
+npm run deploy -- --reinstall-npm
+
+# 重装 npm 依赖。Linux 同时重装 FFmpeg、重建托管的 Whisper 并重新下载模型
+npm run deploy -- --reinstall
+```
+
+Linux 默认也会复用 FFmpeg、Whisper 和已有模型。Whisper 检查当前环境变量及 `backend/.env` 中配置的路径，未指定时检查 `INSTALL_DIR` 下的托管目录（默认 `/opt/whisper.cpp`）。重装系统组件只操作托管的 Whisper 和模型路径。若使用自定义的外部安装，部署会继续按原配置使用它。Windows 部署只管理 npm 依赖，两种重装参数等效，也可直接使用 `scripts\deploy.ps1 -Reinstall`。
 
 后端会将 `frontend/dist` 作为静态文件挂载到 `/news` 提供服务，并支持前端路由 fallback。访问 `http://localhost:3000/news/` 即可使用。
 

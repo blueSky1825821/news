@@ -1,26 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-function stripHtml(html) {
-  if (!html) return '';
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import { NEWS_RATE, resolveSpeechVoices, speechSegments, speechText } from '../services/speech.js';
 
 function formatSpeechText({ title, summary, content, sourceName, publishedAt, mode }) {
+  if (mode === 'title') return title || '';
+
   let body = '';
   if (mode === 'full' && content) {
-    body = stripHtml(content);
+    body = speechText(content);
   } else {
-    body = summary ? stripHtml(summary) : stripHtml(content);
+    body = summary ? speechText(summary) : speechText(content);
   }
 
   const metaParts = [];
@@ -36,26 +25,29 @@ function formatSpeechText({ title, summary, content, sourceName, publishedAt, mo
     }
   }
 
-  const meta = metaParts.length > 0 ? metaParts.join(' · ') + '。' : '';
-  return `${meta}${title}。${body}`;
+  const meta = metaParts.length > 0 ? metaParts.join('，') + '\n' : '';
+  return `${meta}${title || ''}\n${body}`;
 }
 
 export function useSpeech(options = {}) {
-  const { rate = 1.05, pitch = 1.0, voiceURI = '' } = options;
+  const { rate = NEWS_RATE, pitch = 1.0, voiceURI = '', englishVoiceURI = '' } = options;
 
   const [isSupported, setIsSupported] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [total, setTotal] = useState(0);
   const [voices, setVoices] = useState([]);
+  const [playbackError, setPlaybackError] = useState('');
+  const [isLoadingArticle, setIsLoadingArticle] = useState(false);
 
+  const playbackRef = useRef(null);
   const queueRef = useRef([]);
   const currentIndexRef = useRef(0);
-  const optionsRef = useRef({ rate, pitch, voiceURI });
+  const optionsRef = useRef({ rate, pitch, voiceURI, englishVoiceURI });
 
   useEffect(() => {
-    optionsRef.current = { rate, pitch, voiceURI };
-  }, [rate, pitch, voiceURI]);
+    optionsRef.current = { rate, pitch, voiceURI, englishVoiceURI };
+  }, [rate, pitch, voiceURI, englishVoiceURI]);
 
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
@@ -67,136 +59,167 @@ export function useSpeech(options = {}) {
     };
 
     loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
     return () => {
-      window.speechSynthesis.onvoiceschanged = null;
+      window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
     };
   }, []);
 
-  const resolveVoice = useCallback((uri) => {
-    if (!uri) return null;
-    return voices.find((v) => v.voiceURI === uri) || null;
-  }, [voices]);
-
-  const speakText = useCallback((text, onEnd) => {
-    if (!isSupported || !text) return;
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = optionsRef.current.rate;
-    utterance.pitch = optionsRef.current.pitch;
-
-    const selectedVoice = resolveVoice(optionsRef.current.voiceURI);
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-
-    utterance.onend = () => {
-      if (onEnd) onEnd();
-    };
-    utterance.onerror = (e) => {
-      console.error('Speech error:', e);
-      setIsPlaying(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  }, [isSupported, resolveVoice]);
+  const cancelPlayback = useCallback(() => {
+    const playback = playbackRef.current;
+    playbackRef.current = null;
+    playback?.controller?.abort();
+    window.speechSynthesis?.cancel();
+  }, []);
 
   const playNext = useCallback(() => {
-    const idx = currentIndexRef.current;
-    if (idx >= queueRef.current.length) {
+    setIsLoadingArticle(false);
+    const index = currentIndexRef.current;
+    const item = queueRef.current[index];
+    if (item === undefined) {
+      playbackRef.current = null;
       setIsPlaying(false);
+      setTotal(0);
       return;
     }
 
-    const item = queueRef.current[idx];
-    const text = typeof item === 'string' ? item : formatSpeechText(item);
-    const onEnd = typeof item === 'string' ? undefined : item.onEnd;
+    const synth = window.speechSynthesis;
+    const playback = { utterance: null, controller: null, paused: false, startPending: null };
+    playbackRef.current = playback;
 
-    speakText(text, () => {
-      if (onEnd) onEnd();
-      currentIndexRef.current = idx + 1;
-      setCurrentIndex(idx + 1);
+    function fail(message) {
+      if (playbackRef.current !== playback) return;
+      playbackRef.current = null;
+      setIsPlaying(false);
+      setTotal(0);
+      setPlaybackError(message);
+    }
+
+    function advance() {
+      if (playbackRef.current !== playback) return;
+      if (playback.paused) {
+        playback.startPending = advance;
+        return;
+      }
+
+      currentIndexRef.current = index + 1;
+      if (currentIndexRef.current < queueRef.current.length) {
+        setCurrentIndex(currentIndexRef.current);
+      }
       playNext();
-    });
-  }, [speakText]);
+    }
+
+    function start(resolvedItem) {
+      if (playbackRef.current !== playback) return;
+      if (playback.paused) {
+        playback.startPending = () => start(resolvedItem);
+        return;
+      }
+      playback.startPending = null;
+
+      const { rate, pitch, voiceURI, englishVoiceURI } = optionsRef.current;
+      const available = resolveSpeechVoices(synth.getVoices(), voiceURI, englishVoiceURI);
+      const text = typeof resolvedItem === 'string' ? resolvedItem : formatSpeechText(resolvedItem);
+      const segments = speechSegments(text, available.english);
+      let segmentIndex = 0;
+
+      function speakSegment() {
+        if (playbackRef.current !== playback) return;
+        const segment = segments[segmentIndex++];
+        if (!segment) {
+          if (typeof resolvedItem !== 'string') resolvedItem.onEnd?.();
+          advance();
+          return;
+        }
+
+        const voice = segment.lang === 'en-US' ? available.english : available.chinese;
+        const utterance = new SpeechSynthesisUtterance(segment.text);
+        utterance.lang = voice?.lang || segment.lang;
+        utterance.rate = rate;
+        utterance.pitch = pitch;
+        if (voice) utterance.voice = voice;
+        utterance.onend = speakSegment;
+        utterance.onerror = () => fail('语音播报失败，请重试或更换音色。');
+        playback.utterance = utterance;
+        synth.speak(utterance);
+      }
+
+      speakSegment();
+    }
+
+    if (item.load) {
+      playback.controller = new AbortController();
+      setIsLoadingArticle(true);
+      item.load(playback.controller.signal).then(resolved => {
+        if (playbackRef.current !== playback) return;
+        setIsLoadingArticle(false);
+        start(resolved);
+      }, err => {
+        if (playbackRef.current !== playback) return;
+        setIsLoadingArticle(false);
+        setPlaybackError(err.message || '无法加载全文，请重试。');
+        advance();
+      });
+    } else {
+      start(item);
+    }
+  }, []);
 
   const playQueue = useCallback((items) => {
-    if (!isSupported || !items || items.length === 0) return;
-    window.speechSynthesis.cancel();
+    if (!isSupported || !items?.length) return;
+    cancelPlayback();
+    setPlaybackError('');
     queueRef.current = items;
     currentIndexRef.current = 0;
     setCurrentIndex(0);
     setTotal(items.length);
     setIsPlaying(true);
+    window.speechSynthesis.resume();
     playNext();
-  }, [isSupported, playNext]);
+  }, [cancelPlayback, isSupported, playNext]);
 
   const playSingle = useCallback((item) => {
-    if (!isSupported || !item) return;
-    window.speechSynthesis.cancel();
-    queueRef.current = [item];
-    currentIndexRef.current = 0;
-    setCurrentIndex(0);
-    setTotal(1);
-    setIsPlaying(true);
-
-    const text = typeof item === 'string' ? item : formatSpeechText(item);
-    const onEnd = typeof item === 'string' ? undefined : item.onEnd;
-
-    speakText(text, () => {
-      if (onEnd) onEnd();
-      setIsPlaying(false);
-    });
-  }, [isSupported, speakText]);
+    if (item) playQueue([item]);
+  }, [playQueue]);
 
   const pause = useCallback(() => {
+    if (!playbackRef.current) return;
+    playbackRef.current.paused = true;
     window.speechSynthesis.pause();
     setIsPlaying(false);
   }, []);
 
   const resume = useCallback(() => {
+    const playback = playbackRef.current;
+    if (!playback) return;
+    playback.paused = false;
     window.speechSynthesis.resume();
     setIsPlaying(true);
+    playback.startPending?.();
   }, []);
 
   const stop = useCallback(() => {
-    window.speechSynthesis.cancel();
+    cancelPlayback();
     queueRef.current = [];
+    setIsLoadingArticle(false);
     currentIndexRef.current = 0;
     setCurrentIndex(0);
     setTotal(0);
     setIsPlaying(false);
-  }, []);
+  }, [cancelPlayback]);
 
   const next = useCallback(() => {
-    window.speechSynthesis.cancel();
-    const idx = currentIndexRef.current + 1;
-    if (idx >= queueRef.current.length) {
-      setIsPlaying(false);
-      return;
-    }
-    currentIndexRef.current = idx;
-    setCurrentIndex(idx);
+    const index = currentIndexRef.current + 1;
+    if (!playbackRef.current || index >= queueRef.current.length) return;
+    cancelPlayback();
+    currentIndexRef.current = index;
+    setCurrentIndex(index);
     setIsPlaying(true);
+    window.speechSynthesis.resume();
+    playNext();
+  }, [cancelPlayback, playNext]);
 
-    const item = queueRef.current[idx];
-    const text = typeof item === 'string' ? item : formatSpeechText(item);
-    const onEnd = typeof item === 'string' ? undefined : item.onEnd;
-
-    speakText(text, () => {
-      if (onEnd) onEnd();
-      currentIndexRef.current = idx + 1;
-      setCurrentIndex(idx + 1);
-      playNext();
-    });
-  }, [speakText, playNext]);
-
-  useEffect(() => {
-    return () => {
-      window.speechSynthesis?.cancel();
-    };
-  }, []);
+  useEffect(() => cancelPlayback, [cancelPlayback]);
 
   return {
     isSupported,
@@ -204,6 +227,8 @@ export function useSpeech(options = {}) {
     currentIndex,
     total,
     voices,
+    playbackError,
+    isLoadingArticle,
     playQueue,
     playSingle,
     pause,

@@ -42,15 +42,15 @@ export default function AppRoutes({
       <Routes>
         <Route path="/" element={
           <NewsList user={user} isAdmin={isAdmin} activeArticleId={activeArticleId}
-            onPlaySingle={onPlaySingle} onPlayAll={onPlayAll} />
+            onPlaySingle={onPlaySingle} onPlayAll={onPlayAll} defaultMode={settings.defaultMode} />
         } />
         <Route path="/article/:id" element={
-          <NewsDetail user={user} onPlaySingle={onPlayText} isAdmin={isAdmin} massSendEnabled={massSendEnabled} />
+          <NewsDetail user={user} onPlaySingle={onPlaySingle} isAdmin={isAdmin} massSendEnabled={massSendEnabled} />
         } />
         <Route path="/settings" element={
           <SettingsPage settings={settings} onChange={onChangeSettings} user={user}
             onUpdateCategories={onUpdateCategories} onUpdateProfile={onUpdateProfile}
-            onChangePassword={onChangePassword} voices={voices} />
+            onChangePassword={onChangePassword} voices={voices} onPreview={onPlayText} />
         } />
         <Route path="/sources" element={<AdminRoute {...permissions}><SourceManager /></AdminRoute>} />
         <Route path="/wechat-settings" element={<AdminRoute {...permissions}><WechatSettings /></AdminRoute>} />

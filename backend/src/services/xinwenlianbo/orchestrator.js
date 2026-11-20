@@ -6,6 +6,7 @@ import { getSetting } from '../../models/settings.js';
 import { startRecording, stopRecording } from './recorder.js';
 import { transcribe } from './transcriber.js';
 import { summarize } from './summarizer.js';
+import { extractOpeningHeadlines, normalizeHeadlines } from './headlines.js';
 import { insertArticle } from '../../models/article.js';
 
 function getConfigValue(key, envName, defaultValue = null) {
@@ -31,7 +32,15 @@ export function getXinwenlianboConfig() {
 }
 
 const RUNNING = new Set(['recording', 'finishing', 'stopping', 'transcribing', 'summarizing']);
+const AUDIO_BYTES_PER_SECOND = 32_000;
+const AUDIO_RETENTION_DAYS = 15;
 let activeTask = null;
+
+function capturedAudioSeconds(audioPath) {
+  if (!audioPath) return null;
+  const bytes = fs.statSync(audioPath, { throwIfNoEntry: false })?.size ?? 0;
+  return Math.floor(Math.max(0, bytes - 44) / AUDIO_BYTES_PER_SECOND);
+}
 
 export function getXinwenlianboDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
@@ -57,8 +66,19 @@ export function getXinwenlianboStatus() {
     completedAt: task?.completedAt ?? null,
     errorMessage: interrupted ? '录制任务已中断，请重新开始' : task?.errorMessage ?? null,
     durationMinutes: activeTask?.durationMinutes ?? null,
+    capturedSeconds: statusAudioSeconds(task),
     articleId: article?.id ?? null
   };
+}
+
+function statusAudioSeconds(task) {
+  if (task?.status !== 'recording') return null;
+  try {
+    return capturedAudioSeconds(activeTask?.audioPath);
+  } catch {
+    // Progress reporting must not interrupt recording.
+    return null;
+  }
 }
 
 function whisperAvailable(executable) {
@@ -81,7 +101,7 @@ export function startXinwenlianboTask(date, { force = false, durationMinutes } =
   const config = getXinwenlianboConfig();
   if (!config.enabled) throw taskError('新闻联播录制已禁用', 409, 1004);
   const db = getDb();
-  const existing = db.prepare('SELECT status FROM xinwenlianbo_tasks WHERE taskDate = ?').get(date);
+  const existing = db.prepare('SELECT status, audioFilePath FROM xinwenlianbo_tasks WHERE taskDate = ?').get(date);
   if (existing?.status === 'completed' && !force) {
     throw taskError('今天的任务已完成，请选择重新录制', 409, 1002);
   }
@@ -119,6 +139,7 @@ export function startXinwenlianboTask(date, { force = false, durationMinutes } =
   const audioPath = path.join(workDir, 'recording.wav');
 
   try {
+    removeRecordingAudio(existing?.audioFilePath, date);
     db.prepare(`
       INSERT INTO xinwenlianbo_tasks (taskDate, status, audioFilePath, startedAt)
       VALUES (?, 'recording', ?, datetime('now'))
@@ -131,7 +152,7 @@ export function startXinwenlianboTask(date, { force = false, durationMinutes } =
     throw err;
   }
 
-  activeTask = { date, durationMinutes: duration };
+  activeTask = { date, durationMinutes: duration, audioPath };
   const completion = processRecording({ date, config, duration, audioPath, workDir, sourceId: source.id, originalUrl: originalUrl.href })
     .finally(() => { activeTask = null; });
   return { status: getXinwenlianboStatus(), completion };
@@ -157,16 +178,18 @@ export function stopXinwenlianboTask({ finish = false } = {}) {
 
 async function processRecording({ date, config, duration, audioPath, workDir, sourceId, originalUrl }) {
   const db = getDb();
+  let cancelled = false;
   try {
     console.log(`[Xinwenlianbo] Starting recording for ${date}...`);
     await startRecording(config.audioUrl, duration * 60, audioPath);
-    if ((fs.statSync(audioPath, { throwIfNoEntry: false })?.size ?? 0) < 32_000) {
+    if (capturedAudioSeconds(audioPath) < 1) {
       throw new Error('未录到有效音频，请检查直播流并至少录制 1 秒');
     }
 
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'transcribing' WHERE taskDate = ?").run(date);
     console.log(`[Xinwenlianbo] Transcribing...`);
-    const transcript = await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath);
+    const transcript = (await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath)).trim();
+    if (!transcript) throw new Error('没有转录到有效文字，请检查录音后重试');
 
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'summarizing', transcript = ? WHERE taskDate = ?")
       .run(transcript, date);
@@ -176,13 +199,14 @@ async function processRecording({ date, config, duration, audioPath, workDir, so
     return publishSummary({ date, sourceId, originalUrl, transcript, ...summary });
 
   } catch (err) {
-    const status = err.code === 'RECORDING_CANCELLED' ? 'cancelled' : 'failed';
+    cancelled = err.code === 'RECORDING_CANCELLED';
+    const status = cancelled ? 'cancelled' : 'failed';
     db.prepare("UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ?, completedAt = datetime('now') WHERE taskDate = ?")
       .run(status, err.message, date);
     if (status === 'cancelled') return { status };
     throw err;
   } finally {
-    if (!config.keepAudio) {
+    if (!config.keepAudio || cancelled) {
       try {
         fs.rmSync(workDir, { recursive: true, force: true });
         db.prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE taskDate = ?').run(date);
@@ -194,6 +218,7 @@ async function processRecording({ date, config, duration, audioPath, workDir, so
 }
 
 async function buildSummary(transcript, config, { manual = false } = {}) {
+  const openingHeadlines = extractOpeningHeadlines(transcript);
   if (config.llmApiKey && config.llmApiUrl) {
     try {
       const result = await summarize(transcript, {
@@ -202,13 +227,17 @@ async function buildSummary(transcript, config, { manual = false } = {}) {
       if (typeof result.summary !== 'string' || !result.summary.trim()) {
         throw new Error('摘要服务未返回有效正文');
       }
-      return { summary: result.summary.trim(), headlines: JSON.stringify(result.headlines || []) };
+      const headlines = normalizeHeadlines(result.headlines);
+      return {
+        summary: result.summary.trim(),
+        headlines: JSON.stringify(headlines.length ? headlines : openingHeadlines)
+      };
     } catch (err) {
       console.error('[Xinwenlianbo] LLM summarization failed:', err.message);
       if (manual) throw new Error('摘要生成失败，请检查模型配置后重试');
     }
   }
-  return { summary: transcript.slice(0, 500), headlines: '[]' };
+  return { summary: transcript.slice(0, 500), headlines: JSON.stringify(openingHeadlines) };
 }
 
 function publishSummary({ date, sourceId, originalUrl, transcript, summary, headlines }) {
@@ -329,6 +358,28 @@ function removeRecordingAudio(audioPath, date) {
       if (err.code !== 'ENOTEMPTY') console.error('[Xinwenlianbo] Could not remove empty recording directory:', err.code);
     }
   }
+}
+
+export function cleanupExpiredXinwenlianboAudio(now = new Date()) {
+  const cutoff = new Date(now.getTime() - AUDIO_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const db = getDb();
+  const expired = db.prepare(`
+    SELECT id, taskDate, audioFilePath FROM xinwenlianbo_tasks
+    WHERE audioFilePath IS NOT NULL
+      AND julianday(COALESCE(startedAt, taskDate || ' 00:00:00+08:00')) < julianday(?)
+  `).all(cutoff);
+  const clearAudio = db.prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE id = ? AND audioFilePath = ?');
+  let cleared = 0;
+  for (const { id, taskDate, audioFilePath } of expired) {
+    if (activeTask?.date === taskDate) continue;
+    try {
+      removeRecordingAudio(audioFilePath, taskDate);
+      cleared += clearAudio.run(id, audioFilePath).changes;
+    } catch (err) {
+      console.error(`[Xinwenlianbo] Audio cleanup failed for task ${id}:`, err.code || err.message);
+    }
+  }
+  return cleared;
 }
 
 export function deleteXinwenlianboRecord(id, { deleteArticle = false } = {}) {

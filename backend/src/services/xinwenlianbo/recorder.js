@@ -8,8 +8,8 @@ export function startRecording(audioUrl, durationSeconds, outputPath) {
   return new Promise((resolve, reject) => {
     const process = spawn('ffmpeg', [
       '-hide_banner', '-loglevel', 'error', '-rw_timeout', '15000000',
-      '-i', audioUrl, '-t', String(durationSeconds),
-      '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-y', outputPath
+      '-i', audioUrl, '-map', '0:a:0', '-t', String(durationSeconds),
+      '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-flush_packets', '1', '-y', outputPath
     ], { stdio: ['pipe', 'ignore', 'pipe'], timeout: (durationSeconds + 90) * 1000 });
 
     const recording = { process, cancelled: false };

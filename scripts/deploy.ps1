@@ -1,8 +1,13 @@
 # AI News Broadcasting - One-Click Deployment Script
-# Usage: .\scripts\deploy.ps1
+# Usage: .\scripts\deploy.ps1 [-Reinstall]
+
+param([switch]$Reinstall)
 
 $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent $PSScriptRoot
+$dependencyScript = Join-Path $PSScriptRoot "ensure-npm-deps.js"
+$dependencyFlags = @()
+if ($Reinstall) { $dependencyFlags += "--reinstall" }
 
 function Write-Step {
     param([string]$Message)
@@ -27,8 +32,10 @@ Write-Host "============================================" -ForegroundColor Green
 Write-Step "1/4 Building frontend..."
 Set-Location "$rootDir\frontend"
 try {
-    npm install
+    node $dependencyScript "$rootDir\frontend" @dependencyFlags
+    if ($LASTEXITCODE -ne 0) { throw "Frontend dependency setup failed (exit $LASTEXITCODE)" }
     npm run build
+    if ($LASTEXITCODE -ne 0) { throw "Frontend build exited with $LASTEXITCODE" }
     Write-Success "Frontend built successfully"
 } catch {
     Write-Error "Frontend build failed: $_"
@@ -36,11 +43,12 @@ try {
 }
 
 # Step 2: Install backend dependencies
-Write-Step "2/4 Installing backend dependencies..."
+Write-Step "2/4 Checking backend dependencies..."
 Set-Location "$rootDir\backend"
 try {
-    npm install --production
-    Write-Success "Backend dependencies installed"
+    node $dependencyScript "$rootDir\backend" --production @dependencyFlags
+    if ($LASTEXITCODE -ne 0) { throw "Backend dependency setup failed (exit $LASTEXITCODE)" }
+    Write-Success "Backend dependencies ready"
 } catch {
     Write-Error "Backend install failed: $_"
     exit 1
@@ -64,3 +72,4 @@ Write-Host "Press Ctrl+C to stop`n" -ForegroundColor Gray
 
 Set-Location "$rootDir\backend"
 node src/server.js
+exit $LASTEXITCODE

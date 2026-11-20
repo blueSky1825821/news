@@ -53,7 +53,7 @@ export default function TodayNews({ activeArticleId, onPlaySingle, user }) {
                 article={article}
                 user={user}
                 isActive={activeArticleId === article.id}
-                onPlay={onPlaySingle && ((a) => onPlaySingle(a, `${a.title}。${a.summary || ''}`))}
+                onPlay={onPlaySingle}
               />
             ))}
           </div>

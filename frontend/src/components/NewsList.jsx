@@ -5,9 +5,11 @@ import NewsCard from './NewsCard.jsx';
 import SourceFilter from './SourceFilter.jsx';
 import HotSidebar from './HotSidebar.jsx';
 
-export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, user, isAdmin = false }) {
+export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, defaultMode, user, isAdmin = false }) {
   const [articles, setArticles] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [playMode, setPlayMode] = useState(null);
+  const selectedMode = playMode ?? defaultMode;
   const [sources, setSources] = useState([]);
   const [selectedSourceId, setSelectedSourceId] = useState(undefined);
   const [loading, setLoading] = useState(true);
@@ -90,8 +92,6 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
     }
   };
 
-  const textsForPlayAll = articles.map((a) => `${a.title}。${a.summary || ''}`);
-
   const showHeadlines = !channel && pagination.page === 1 && !selectedSourceId && articles.length >= 4;
   const [lead, ...briefs] = showHeadlines ? articles.slice(0, 4) : [];
   const latest = showHeadlines ? articles.slice(4) : articles;
@@ -103,7 +103,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
       isAdmin={isAdmin}
       isActive={activeArticleId === article.id}
       variant={variant}
-      onPlay={onPlaySingle && ((a) => onPlaySingle(a, `${a.title}。${a.summary || ''}`))}
+      onPlay={onPlaySingle}
     />
   );
 
@@ -133,8 +133,14 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, use
           <h1>{channel === 'interests' ? '我的兴趣' : channelLabel || (showHeadlines ? '头条新闻' : '新闻快讯')}</h1>
           <div className="news-toolbar">
             <SourceFilter sources={sourceOptions} selectedId={selectedSourceId} onChange={handleSourceChange} />
+            <select aria-label="全部播报范围" value={selectedMode} className="news-action"
+              onChange={event => setPlayMode(event.target.value)}>
+              <option value="title">仅标题</option>
+              <option value="summary">标题和摘要</option>
+              <option value="full">全文</option>
+            </select>
             <button
-              onClick={() => onPlayAll?.(articles, textsForPlayAll)}
+              onClick={() => onPlayAll?.(articles, selectedMode)}
               disabled={loading || !!error || articles.length === 0}
               className="news-primary"
             >

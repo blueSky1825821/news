@@ -5,7 +5,7 @@ import { api } from '../services/api.js';
 import XinwenlianboHistory, { RECORDING_LABELS } from './XinwenlianboHistory.jsx';
 
 const RUNNING = new Set(['recording', 'finishing', 'stopping', 'transcribing', 'summarizing']);
-const STEPS = ['录制', '转录', '摘要'];
+const STEPS = ['录制', '转录', '提取标题与摘要'];
 const PHASE = { recording: 0, finishing: 0, transcribing: 1, summarizing: 2, completed: 3 };
 
 export default function XinwenlianboRecording({ refresh = 0 }) {
@@ -16,7 +16,6 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
   const [actionError, setActionError] = useState('');
   const [statusError, setStatusError] = useState(false);
   const [confirm, setConfirm] = useState(null);
-  const [now, setNow] = useState(Date.now);
 
   const status = task?.status ?? 'pending';
   const running = RUNNING.has(status);
@@ -53,13 +52,6 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [action, running, refresh]);
 
-  useEffect(() => {
-    if (status !== 'recording') return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [status]);
-
   async function perform(next) {
     if (action) return;
     setConfirm(null);
@@ -78,10 +70,9 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
     }
   }
 
-  const started = task?.startedAt ? Date.parse(task.startedAt.replace(' ', 'T') + (task.startedAt.includes('T') ? '' : 'Z')) : NaN;
   const plannedSeconds = task?.durationMinutes * 60;
-  const elapsed = Math.max(0, Math.floor((now - started) / 1000));
-  const progress = status === 'recording' && Number.isFinite(elapsed) && plannedSeconds > 0;
+  const captured = task?.capturedSeconds;
+  const progress = status === 'recording' && plannedSeconds > 0;
   const phase = PHASE[status] ?? -1;
 
   return (
@@ -93,7 +84,7 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
             {task?.date && `${task.date} · `}{task ? RECORDING_LABELS[status] ?? status : '正在获取状态…'}
           </p>
         </div>
-        <p className="mt-1 text-sm text-gray-600">手动录制从当前直播开始，录制结束后自动转录并生成摘要。</p>
+        <p className="mt-1 text-sm text-gray-600">手动录制从当前直播开始，录制结束后自动转录、提取标题并生成摘要。留存音频超过 15 天后自动清理。</p>
         <ol className="my-4 flex flex-wrap gap-2 text-sm" aria-label="录制处理步骤">
           {STEPS.map((label, index) => (
             <li key={label} aria-current={phase === index ? 'step' : undefined}
@@ -105,9 +96,11 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
         {progress && (
           <div className="mb-4">
             <progress className="block h-2 w-full accent-blue-600" max={plannedSeconds}
-              value={Math.min(elapsed, plannedSeconds)} aria-label="预计录制进度" />
+              value={Number.isFinite(captured) ? Math.min(captured, plannedSeconds) : undefined} aria-label="音频录制进度" />
             <p className="mt-2 text-xs text-gray-600">
-              预计已录制 {Math.floor(elapsed / 60)} 分 {elapsed % 60} 秒 · 计划 {task.durationMinutes} 分钟
+              {captured > 0
+                ? `已收录 ${Math.floor(captured / 60)} 分 ${captured % 60} 秒`
+                : '正在等待直播音频'} · 计划 {task.durationMinutes} 分钟
             </p>
           </div>
         )}
@@ -136,8 +129,8 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
           )}
           {status === 'recording' && (
             <>
-              <button type="button" className="news-primary" disabled={!!action || !!confirm}
-                onClick={() => perform('finish')}>提前结束并生成摘要</button>
+              <button type="button" className="news-primary" disabled={!!action || !!confirm || captured === 0}
+                onClick={() => perform('finish')}>结束录制并提取标题</button>
               <button type="button" className="news-action" disabled={!!action || !!confirm}
                 onClick={() => setConfirm('cancel')}>取消录制</button>
             </>

@@ -7,7 +7,7 @@ const TABS = [
   { key: 'tts', label: '播报设置' }
 ];
 
-export default function SettingsPage({ settings, onChange, user, onUpdateCategories, onUpdateProfile, onChangePassword, voices = [] }) {
+export default function SettingsPage({ settings, onChange, user, onUpdateCategories, onUpdateProfile, onChangePassword, voices = [], onPreview }) {
   const [activeTab, setActiveTab] = useState('profile');
 
   return (
@@ -36,7 +36,7 @@ export default function SettingsPage({ settings, onChange, user, onUpdateCategor
             onUpdateProfile={onUpdateProfile} onChangePassword={onChangePassword} />
         )}
         {activeTab === 'tts' && (
-          <TtsSettings settings={settings} onChange={onChange} voices={voices} />
+          <TtsSettings settings={settings} onChange={onChange} voices={voices} onPreview={onPreview} />
         )}
       </div>
     </div>

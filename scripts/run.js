@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Cross-platform launcher for deploy and dev scripts.
- * Usage: node scripts/run.js <deploy|dev>
+ * Usage: node scripts/run.js <deploy|dev> [options]
  */
 
 import { spawn } from 'child_process';
@@ -10,10 +10,19 @@ import path from 'path';
 import os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const command = process.argv[2];
+const [, , command, ...args] = process.argv;
 
 if (!command || (command !== 'deploy' && command !== 'dev')) {
   console.error('Usage: node scripts/run.js <deploy|dev>');
+  process.exit(1);
+}
+
+if (command === 'deploy' && args.some(arg => arg === '--help' || arg === '-h')) {
+  console.log('Usage: npm run deploy -- [--reinstall | --reinstall-npm]');
+  process.exit(0);
+}
+if (command === 'deploy' && args.some(arg => !['--reinstall', '--reinstall-npm'].includes(arg))) {
+  console.error('Unknown deployment option. Run npm run deploy -- --help for usage.');
   process.exit(1);
 }
 
@@ -27,15 +36,20 @@ console.log(`Running: ${scriptPath}`);
 
 let child;
 if (isWindows) {
-  child = spawn('powershell', ['-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+  const switches = command === 'deploy' && args.length ? ['-Reinstall'] : [];
+  child = spawn('powershell', ['-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...switches], {
     stdio: 'inherit'
   });
 } else {
-  child = spawn('bash', [scriptPath], {
+  child = spawn('bash', [scriptPath, ...(command === 'deploy' ? args : [])], {
     stdio: 'inherit'
   });
 }
 
-child.on('exit', (code) => {
-  process.exit(code || 0);
+child.on('error', error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+child.on('exit', code => {
+  process.exitCode = code ?? 1;
 });

@@ -2,6 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../services/api.js';
+import { readNewsHeadlines } from '../services/newsHeadlines.js';
 import LikeButton from './LikeButton.jsx';
 import CommentSection from './CommentSection.jsx';
 
@@ -55,7 +56,7 @@ function prepareArticleContent(content) {
     img.setAttribute('loading', 'lazy');
     img.setAttribute('decoding', 'async');
   });
-  return { html: doc.body.innerHTML, plainText: doc.body.textContent || '' };
+  return doc.body.innerHTML;
 }
 
 export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSendEnabled = false }) {
@@ -119,7 +120,8 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
     }
   };
 
-  const { html, plainText } = useMemo(() => prepareArticleContent(article?.content), [article?.content]);
+  const headlines = readNewsHeadlines(article?.headlines);
+  const html = useMemo(() => prepareArticleContent(article?.content), [article?.content]);
 
   if (loading) {
     return (
@@ -171,8 +173,11 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          onClick={() => onPlaySingle && onPlaySingle(plainText)}
+        <button type="button" onClick={() => onPlaySingle?.(article, 'title')} className="news-action">
+          播报标题
+        </button>
+        <button type="button"
+          onClick={() => onPlaySingle?.(article, 'full')}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           播报全文
@@ -199,19 +204,11 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
         </button>}
       </div>
 
-      {article.category === 'xinwenlianbo' && article.headlines && (
+      {article.category === 'xinwenlianbo' && headlines.length > 0 && (
         <div className="mb-4 rounded-lg bg-red-50 p-4">
           <h3 className="mb-2 text-sm font-semibold text-red-800">今日要闻</h3>
           <ol className="list-decimal pl-5 text-sm text-red-700">
-            {(() => {
-              try {
-                return JSON.parse(article.headlines || '[]').map((h, i) => (
-                  <li key={i}>{h}</li>
-                ));
-              } catch {
-                return null;
-              }
-            })()}
+            {headlines.map((title, index) => <li key={index}>{title}</li>)}
           </ol>
         </div>
       )}

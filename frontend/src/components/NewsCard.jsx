@@ -51,12 +51,13 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
         )}
       </div>
       {variant !== 'brief' && article.summary && <p className="news-story-summary">{article.summary}</p>}
-      <div className="flex items-center gap-3 mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-3">
         <LikeButton article={article} user={user} />
         {onPlay && (
-          <button onClick={() => onPlay(article)} className="news-listen" aria-label={`播报 ${article.title}`}>
-            <span aria-hidden="true">▶</span> {isActive ? '播放中' : '播报'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`播报 ${article.title}`}>
+            <button type="button" onClick={() => onPlay(article, 'title')} className="news-listen">播报标题</button>
+            <button type="button" onClick={() => onPlay(article, 'full')} className="news-listen">播报全文</button>
+          </div>
         )}
       </div>
     </article>

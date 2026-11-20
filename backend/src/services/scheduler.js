@@ -11,7 +11,7 @@ import { getDb } from '../db.js';
 
 
 import { cleanupOldArticles } from '../models/article.js';
-import { getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
+import { cleanupExpiredXinwenlianboAudio, getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
@@ -208,9 +208,23 @@ export function stopCleanupScheduler() {
 }
 
 let xinwenlianboTask = null;
+let audioCleanupTask = null;
+
+function clearExpiredAudio() {
+  try {
+    const cleared = cleanupExpiredXinwenlianboAudio();
+    if (cleared) console.log(`[Xinwenlianbo] Cleared ${cleared} expired recordings.`);
+  } catch (err) {
+    console.error('[Xinwenlianbo] Audio cleanup failed:', err.message);
+  }
+}
 
 export function startXinwenlianboScheduler() {
   if (xinwenlianboTask) return;
+  if (!audioCleanupTask) {
+    clearExpiredAudio();
+    audioCleanupTask = cron.schedule('0 * * * *', clearExpiredAudio, { timezone: 'Asia/Shanghai' });
+  }
   if (process.env.XINWENLIANBO_ENABLED === 'false') {
     console.log('[Xinwenlianbo] Scheduler disabled.');
     return;
@@ -234,6 +248,8 @@ export function startXinwenlianboScheduler() {
 }
 
 export function stopXinwenlianboScheduler() {
+  audioCleanupTask?.stop();
+  audioCleanupTask = null;
   if (xinwenlianboTask) {
     xinwenlianboTask.stop();
     xinwenlianboTask = null;

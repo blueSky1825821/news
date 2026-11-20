@@ -23,8 +23,8 @@ describe('Xinwenlianbo Recorder', () => {
     const recording = startRecording('http://test.m3u8', 60, '/tmp/test.wav');
     expect(spawn).toHaveBeenCalledWith('ffmpeg', [
       '-hide_banner', '-loglevel', 'error', '-rw_timeout', '15000000',
-      '-i', 'http://test.m3u8', '-t', '60',
-      '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-y', '/tmp/test.wav'
+      '-i', 'http://test.m3u8', '-map', '0:a:0', '-t', '60',
+      '-ar', '16000', '-ac', '1', '-acodec', 'pcm_s16le', '-flush_packets', '1', '-y', '/tmp/test.wav'
     ], { stdio: ['pipe', 'ignore', 'pipe'], timeout: 150000 });
     expect(stopRecording({ finish: true })).toBe(true);
     expect(child.stdin.write).toHaveBeenCalledWith('q\n');

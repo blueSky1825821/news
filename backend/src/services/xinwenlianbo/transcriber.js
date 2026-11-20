@@ -13,11 +13,16 @@ export async function transcribe(audioPath, whisperExecutable, modelPath) {
       '-otxt',
       '-of', outputPrefix,
       '-np'
-    ]);
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
 
+    let stderr = '';
+    whisper.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-1500); });
     whisper.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`whisper.cpp exited with code ${code}`));
+      else {
+        console.error('[Xinwenlianbo] Whisper exited:', code, stderr.trim());
+        reject(new Error('转录失败，请检查 Whisper 配置和服务器日志'));
+      }
     });
 
     whisper.on('error', reject);

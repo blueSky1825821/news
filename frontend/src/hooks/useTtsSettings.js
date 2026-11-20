@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 
+import { NEWS_RATE } from '../services/speech.js';
+
 const STORAGE_KEY = 'news-tts-settings';
 
 export const DEFAULT_TTS_SETTINGS = {
-  rate: 1.05,
+  rate: NEWS_RATE,
   pitch: 1.0,
   defaultMode: 'summary', // 'summary' | 'full'
-  voiceURI: '' // 空字符串表示使用浏览器默认语音
+  voiceURI: '',
+  englishVoiceURI: ''
 };
 
 export function useTtsSettings() {
