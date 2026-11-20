@@ -122,11 +122,31 @@ if $needs_build || $needs_model; then
     fi
 
     if $needs_model; then
+        model_endpoint="${HF_ENDPOINT:-https://hf-mirror.com}"
+        model_repo=ggerganov/whisper.cpp
+        if [[ "$MODEL_NAME" == *tdrz* ]]; then
+            model_repo=akashmjn/tinydiarize-whisper.cpp
+        fi
+        model_url="${model_endpoint%/}/$model_repo/resolve/main/ggml-$MODEL_NAME.bin"
         stage_dir="$("${install_command[@]}" mktemp -d "$WHISPER_DIR/models/.download.XXXXXX")"
         staged_model="$stage_dir/ggml-$MODEL_NAME.bin"
         trap '"${install_command[@]}" rm -f -- "$staged_model"; "${install_command[@]}" rmdir -- "$stage_dir"' EXIT
-        "${install_command[@]}" bash "$WHISPER_DIR/models/download-ggml-model.sh" "$MODEL_NAME" "$stage_dir"
+        printf '  Downloading Whisper model %s from %s\n' "$MODEL_NAME" "$model_url"
+        if ! "${install_command[@]}" curl --fail --location --connect-timeout 15 \
+            --speed-limit 1024 --speed-time 30 --retry 2 --retry-delay 2 \
+            --output "$staged_model" "$model_url"; then
+            echo '  Whisper model download failed. Set HF_ENDPOINT to a reachable mirror or WHISPER_MODEL_PATH to a local model.' >&2
+            exit 1
+        fi
         [[ -s "$staged_model" ]]
+        if [[ "$MODEL_NAME" == base-q5_1 ]]; then
+            expected_sha256=422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898
+            if ! printf '%s  %s\n' "$expected_sha256" "$staged_model" |
+                "${install_command[@]}" sha256sum --check --status; then
+                echo '  Whisper model checksum verification failed.' >&2
+                exit 1
+            fi
+        fi
         "${install_command[@]}" mv -f -- "$staged_model" "$MANAGED_MODEL"
     fi
 else
