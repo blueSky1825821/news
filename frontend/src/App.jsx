@@ -1,70 +1,45 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { useSpeech } from './hooks/useSpeech.js';
 import { useTtsSettings } from './hooks/useTtsSettings.js';
 import { useAuth } from './hooks/useAuth.js';
-import NewsList from './components/NewsList.jsx';
-import NewsDetail from './components/NewsDetail.jsx';
-import SourceManager from './components/SourceManager.jsx';
-import TtsSettings from './components/TtsSettings.jsx';
-import LoginForm from './components/LoginForm.jsx';
-import RegisterForm from './components/RegisterForm.jsx';
-import WechatSettings from './components/WechatSettings.jsx';
-import TodayNews from './components/TodayNews.jsx';
+import AppRoutes from './AppRoutes.jsx';
+import Navbar from './components/Navbar.jsx';
 import AutoPlayBar from './components/AutoPlayBar.jsx';
-import WechatLogin from './components/WechatLogin.jsx';
-import PushNews from './components/PushNews.jsx';
+import EmailVerificationBanner from './components/EmailVerificationBanner.jsx';
 import { api } from './services/api.js';
 
-function Navbar({ user, isLoading, onLogout }) {
-  return (
-    <nav className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <Link to="/" className="text-lg font-bold text-gray-900">AI 新闻播报</Link>
-        <div className="flex items-center gap-4">
-          <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">首页</Link>
-          {!isLoading && user?.role === 'admin' && <Link to="/sources" className="text-sm text-gray-600 hover:text-gray-900">来源管理</Link>}
-          <Link to="/settings" className="text-sm text-gray-600 hover:text-gray-900">设置</Link>
-          {!isLoading && user?.role === 'admin' && <Link to="/wechat-settings" className="text-sm text-gray-600 hover:text-gray-900">公众号后台</Link>}
+function articlePlayback(article, mode) {
+  if (mode !== 'full') return { title: article.title, summary: article.summary, mode };
 
-          {!isLoading && (
-            user ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-700">{user.displayName || user.email}{user.role === 'admin' ? '（管理员）' : ''}</span>
-                <button
-                  onClick={onLogout}
-                  className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  退出登录
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/login"
-                  className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  登录
-                </Link>
-                <Link
-                  to="/register"
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  注册
-                </Link>
-              </div>
-            )
-          )}
-        </div>
-      </div>
-    </nav>
-  );
+  const fullItem = (details) => {
+    const content = details.transcript || details.content;
+    if (!content?.trim()) throw new Error(`《${details.title}》暂无可播报的全文。`);
+    return { title: details.title, content, mode };
+  };
+  if ((article.transcript || article.content)?.trim()) return fullItem(article);
+  return {
+    async load(signal) {
+      const details = await api.getArticle(article.id, { signal });
+      return fullItem(details);
+    }
+  };
 }
 
 export default function App() {
   const { settings, setSettings } = useTtsSettings();
-  const { user, isLoading, login, wechatLogin, register, logout, updateCategories } = useAuth();
+  const { user, isLoading, login, wechatLogin, register, logout, refreshUser, updateCategories, updateProfile, changePassword } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const navigationType = useNavigationType();
+  const previousPath = useRef(pathname);
+
+  useEffect(() => {
+    if (pathname !== previousPath.current && navigationType !== 'POP') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    previousPath.current = pathname;
+  }, [pathname, navigationType]);
   const [massSendEnabled, setMassSendEnabled] = useState(false);
   useEffect(() => {
     let active = true;
@@ -81,13 +56,15 @@ export default function App() {
     currentIndex,
     total,
     voices,
+    playbackError,
+    isLoadingArticle,
     playQueue,
     playSingle,
     pause,
     resume,
     stop,
     next
-  } = useSpeech({ rate: settings.rate, pitch: settings.pitch, voiceURI: settings.voiceURI });
+  } = useSpeech(settings);
 
   const [activeArticleId, setActiveArticleId] = useState(null);
   const playingArticlesRef = useRef([]);
@@ -103,16 +80,22 @@ export default function App() {
     }
   }, [currentIndex, total]);
 
-  const handlePlaySingle = (article, text) => {
+  const handlePlaySingle = (article, mode) => {
     playingArticlesRef.current = [article];
     setActiveArticleId(article.id);
-    playSingle(text);
+    playSingle(articlePlayback(article, mode));
   };
 
-  const handlePlayAll = (articles, texts) => {
+  const handlePlayAll = (articles, mode) => {
     playingArticlesRef.current = articles;
     setActiveArticleId(articles[0]?.id || null);
-    playQueue(texts);
+    playQueue(articles.map(article => articlePlayback(article, mode)));
+  };
+
+  const handlePlayText = (item) => {
+    playingArticlesRef.current = [];
+    setActiveArticleId(null);
+    playSingle(item);
   };
 
   const handleStop = () => {
@@ -126,56 +109,26 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen pb-20">
+      <a className="news-skip-link" href="#main-content">跳到正文</a>
       <Navbar user={user} isLoading={isLoading} onLogout={handleLogout} />
 
-      <div className="mx-auto max-w-5xl px-4 py-6">
+      <EmailVerificationBanner key={user?.id} user={user} />
+      <main id="main-content" className="news-shell news-main" tabIndex={-1}>
         {!isSupported && <p className="mb-4 text-sm text-gray-500">当前浏览器不支持语音播报，可以正常阅读新闻。</p>}
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <NewsList
-                isAdmin={!isLoading && user?.role === 'admin'}
-                activeArticleId={activeArticleId}
-                onPlaySingle={handlePlaySingle}
-                onPlayAll={handlePlayAll}
-              />
-            }
-          />
-          <Route
-            path="/article/:id"
-            element={<NewsDetail onPlaySingle={playSingle} isAdmin={!isLoading && user?.role === 'admin'} massSendEnabled={massSendEnabled} />}
-          />
-          <Route path="/sources" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <SourceManager /> : <Navigate to={user ? '/' : '/login'} replace />} />
-          <Route
-            path="/settings"
-            element={
-              <TtsSettings
-                settings={settings}
-                onChange={setSettings}
-                user={user}
-                onUpdateCategories={updateCategories}
-                voices={voices}
-              />
-            }
-          />
-          <Route path="/wechat-settings" element={isLoading ? <p>加载中...</p> : user?.role === 'admin' ? <WechatSettings /> : <Navigate to={user ? '/' : '/login'} replace />} />
-          <Route path="/wechat-login" element={<WechatLogin onLogin={wechatLogin} />} />
-          <Route path="/push/:id" element={<PushNews user={user} isLoading={isLoading} />} />
-          <Route path="/today" element={<TodayNews />} />
-          <Route path="/login" element={<LoginForm onLogin={login} />} />
-          <Route
-            path="/register"
-            element={<RegisterForm onRegister={register} />}
-          />
-        </Routes>
-      </div>
+        {playbackError && <p className="mb-4 text-sm text-red-700" role="alert">{playbackError}</p>}
+        <AppRoutes user={user} isLoading={isLoading} massSendEnabled={massSendEnabled}
+          activeArticleId={activeArticleId} onPlaySingle={handlePlaySingle} onPlayAll={handlePlayAll}
+          onPlayText={handlePlayText} settings={settings} onChangeSettings={setSettings} voices={voices}
+          onUpdateCategories={updateCategories} onUpdateProfile={updateProfile} onChangePassword={changePassword}
+          onLogin={login} onWechatLogin={wechatLogin} onVerify={refreshUser} onRegister={register} />
+      </main>
 
       <AutoPlayBar
         currentIndex={currentIndex}
         total={total}
         isPlaying={isPlaying}
+        isLoadingArticle={isLoadingArticle}
         onPause={pause}
         onResume={resume}
         onNext={next}

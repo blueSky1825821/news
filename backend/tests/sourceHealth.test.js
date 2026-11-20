@@ -1,4 +1,5 @@
 import { getDb, closeDb, initSchema } from '../src/db.js';
+import { insertArticle } from '../src/models/article.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
 import {
   recordSuccess,
@@ -78,10 +79,21 @@ describe('Source Health', () => {
   });
 
   test('listHealth returns joined data', () => {
+    recordSuccess(sourceId);
     recordFailure(sourceId, 'bad');
+    const newsId = insertSource({
+      name: '新闻联播', rssUrl: 'https://example.com/live.m3u8', category: 'xinwenlianbo', type: 'xinwenlianbo'
+    });
+    insertArticle({
+      title: 'Broadcast', originalUrl: 'https://example.com/broadcast', sourceId: newsId,
+      publishedAt: '2026-11-18T20:00:00+08:00'
+    });
     const health = listHealth();
-    expect(health).toHaveLength(1);
+    expect(health).toHaveLength(2);
     expect(health[0].consecutiveFailures).toBe(1);
     expect(health[0].name).toBe('Test Source');
+    expect(health[0].latestArticleAt).toBeNull();
+    expect(health[1].type).toBe('xinwenlianbo');
+    expect(health[1].latestArticleAt).toBe('2026-11-18T12:00:00.000Z');
   });
 });

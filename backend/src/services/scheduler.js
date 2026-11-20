@@ -1,16 +1,17 @@
 import cron from 'node-cron';
 import { getActiveSources, getSourceById } from '../models/source.js';
-import { crawlAllSources, crawlSource } from './crawler.js';
+import { crawlAllSources, crawlSource, classifyError } from './crawler.js';
 import { getWechatSettings } from '../models/wechatSettings.js';
 import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
 import { wechatCapabilities } from './wechatConfig.js';
-import { recordSuccess, recordFailure, deactivateSource } from '../models/sourceHealth.js';
+import { getHealth, recordSuccess, recordFailure, recordCooldown, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
 
 
 import { cleanupOldArticles } from '../models/article.js';
+import { cleanupExpiredXinwenlianboAudio, getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
@@ -35,8 +36,7 @@ export function startScheduler(cronExpression = '*/30 * * * *') {
   task = cron.schedule(cronExpression, async () => {
     try {
       console.log('[Scheduler] Starting crawl...');
-      const sources = getActiveSources();
-      await crawlAllSources(sources);
+      await crawlActiveRssSources();
       console.log('[Scheduler] Crawl finished.');
     } catch (err) {
       console.error('[Scheduler] Crawl task failed:', err.message);
@@ -57,9 +57,27 @@ export function stopScheduler() {
 
 export async function triggerManualCrawl() {
   console.log('[Scheduler] Manual crawl triggered.');
-  const sources = getActiveSources();
-  const results = await crawlAllSources(sources);
-  return results;
+  return crawlActiveRssSources();
+}
+
+let activeBatch = null;
+const activeSources = new Map();
+
+function crawlActiveRssSources() {
+  if (!activeBatch) {
+    const sources = getActiveSources().filter((source) => source.type === 'rss');
+    activeBatch = crawlAllSources(sources, crawlSourceOnce).finally(() => { activeBatch = null; });
+  }
+  return activeBatch;
+}
+
+function crawlSourceOnce(source) {
+  let pending = activeSources.get(source.id);
+  if (!pending) {
+    pending = crawlWithHealth(source).finally(() => activeSources.delete(source.id));
+    activeSources.set(source.id, pending);
+  }
+  return pending;
 }
 
 export async function triggerManualCrawlForSource(sourceId) {
@@ -70,20 +88,39 @@ export async function triggerManualCrawlForSource(sourceId) {
   if (!source.isActive) {
     throw new Error('Source is inactive');
   }
-  try {
-    const articles = await crawlSource(source);
-    recordSuccess(source.id);
-    return { source: source.name, count: articles.length, articles };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'Unknown error');
-    console.error(`Manual crawl failed for ${source.name}:`, msg);
-    recordFailure(source.id, msg);
-    const threshold = getFailureThreshold();
-    if (deactivateSource(source.id, threshold)) {
-      console.warn(`[Health] Source "${source.name}" deactivated after ${threshold} consecutive failures.`);
-    }
-    throw err instanceof Error ? err : new Error(msg);
+  if (source.type !== 'rss') {
+    throw new Error('Source is not an RSS feed');
   }
+  const articles = await crawlSourceOnce(source);
+  return { source: source.name, count: articles.length, articles };
+}
+
+async function crawlWithHealth(source) {
+  const { retryAfterAt } = getHealth(source.id);
+  if (retryAfterAt > Date.now()) {
+    const seconds = Math.ceil((retryAfterAt - Date.now()) / 1_000);
+    throw new Error(`RSS 来源要求暂停抓取，请在 ${seconds} 秒后重试`);
+  }
+
+  let articles;
+  try {
+    articles = await crawlSource(source);
+  } catch (err) {
+    const { type, message, cooldownMs } = classifyError(err);
+    // Storage errors are operational failures, not evidence that the source is down.
+    if (cooldownMs && getSourceById(source.id)) {
+      recordCooldown(source.id, message, Date.now() + cooldownMs);
+    } else if (type !== 'unknown' && getSourceById(source.id)) {
+      recordFailure(source.id, message);
+      const threshold = getFailureThreshold();
+      if (deactivateSource(source.id, threshold)) {
+        console.warn(`[Health] Source "${source.name}" deactivated after ${threshold} consecutive failures.`);
+      }
+    }
+    throw err;
+  }
+  if (getSourceById(source.id)) recordSuccess(source.id);
+  return articles;
 }
 
 let summaryTask = null;
@@ -167,5 +204,55 @@ export function stopCleanupScheduler() {
     cleanupTask.stop();
     cleanupTask = null;
     console.log('[Cleanup] Scheduler stopped.');
+  }
+}
+
+let xinwenlianboTask = null;
+let audioCleanupTask = null;
+
+function clearExpiredAudio() {
+  try {
+    const cleared = cleanupExpiredXinwenlianboAudio();
+    if (cleared) console.log(`[Xinwenlianbo] Cleared ${cleared} expired recordings.`);
+  } catch (err) {
+    console.error('[Xinwenlianbo] Audio cleanup failed:', err.message);
+  }
+}
+
+export function startXinwenlianboScheduler() {
+  if (xinwenlianboTask) return;
+  if (!audioCleanupTask) {
+    clearExpiredAudio();
+    audioCleanupTask = cron.schedule('0 * * * *', clearExpiredAudio, { timezone: 'Asia/Shanghai' });
+  }
+  if (process.env.XINWENLIANBO_ENABLED === 'false') {
+    console.log('[Xinwenlianbo] Scheduler disabled.');
+    return;
+  }
+
+  const cronExpression = process.env.XINWENLIANBO_CRON || '0 19 * * *';
+
+  xinwenlianboTask = cron.schedule(cronExpression, async () => {
+    try {
+      const today = getXinwenlianboDate();
+      console.log(`[Xinwenlianbo] Scheduled task triggered for ${today}`);
+      await runXinwenlianboTask(today);
+    } catch (err) {
+      console.error('[Xinwenlianbo] Scheduled task failed:', err.message);
+    }
+  }, {
+    timezone: 'Asia/Shanghai'
+  });
+
+  console.log('[Xinwenlianbo] Scheduler started with cron:', cronExpression);
+}
+
+export function stopXinwenlianboScheduler() {
+  audioCleanupTask?.stop();
+  audioCleanupTask = null;
+  if (xinwenlianboTask) {
+    xinwenlianboTask.stop();
+    xinwenlianboTask = null;
+    console.log('[Xinwenlianbo] Scheduler stopped.');
   }
 }

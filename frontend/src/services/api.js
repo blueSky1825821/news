@@ -2,10 +2,11 @@
 
 async function request(url, options = {}) {
   const token = localStorage.getItem('news-auth-token');
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(BASE_URL + url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
@@ -22,26 +23,27 @@ async function request(url, options = {}) {
 }
 
 export const api = {
-  getArticles(params = {}) {
+  getArticles(params = {}, options = {}) {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.sourceId) qs.set('sourceId', String(params.sourceId));
-    if (params.category) qs.set('category', params.category);
+    if (params.view) qs.set('view', params.view);
+    for (const category of [params.category].flat().filter(Boolean)) qs.append('category', category);
     const query = qs.toString();
-    return request('/api/articles' + (query ? '?' + query : ''));
+    return request('/api/articles' + (query ? '?' + query : ''), options);
   },
 
-  getArticle(id) {
-    return request('/api/articles/' + id);
+  getArticle(id, options = {}) {
+    return request('/api/articles/' + id + '?includeLikes=1', options);
   },
 
-  getTodayArticles(params = {}) {
+  getTodayArticles(params = {}, options = {}) {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     const query = qs.toString();
-    return request('/api/articles/today' + (query ? '?' + query : ''));
+    return request('/api/articles/today' + (query ? '?' + query + '&view=card' : '?view=card'), options);
   },
 
   getSources() {
@@ -173,5 +175,120 @@ export const api = {
 
   sendPreview() {
     return request('/api/wechat/preview', { method: 'POST' });
+  },
+
+  // Xinwenlianbo
+  getXinwenlianboStatus(options = {}) {
+    return request('/api/xinwenlianbo/status', options);
+  },
+  triggerXinwenlianbo({ durationMinutes, force = false } = {}) {
+    return request(`/api/xinwenlianbo/trigger${force ? '?force=true' : ''}`, {
+      method: 'POST', body: JSON.stringify({ durationMinutes })
+    });
+  },
+  stopXinwenlianbo({ finish = false } = {}) {
+    return request('/api/xinwenlianbo/stop', { method: 'POST', body: JSON.stringify({ finish }) });
+  },
+  getXinwenlianboTasks(page = 1, options = {}) {
+    return request(`/api/xinwenlianbo/tasks?page=${page}`, options);
+  },
+  getXinwenlianboRecord(id, options = {}) {
+    return request(`/api/xinwenlianbo/tasks/${id}`, options);
+  },
+  deleteXinwenlianboRecord(id, { deleteArticle = false } = {}) {
+    return request(`/api/xinwenlianbo/tasks/${id}`, {
+      method: 'DELETE', body: JSON.stringify({ deleteArticle })
+    });
+  },
+  summarizeXinwenlianboRecord(id) {
+    return request(`/api/xinwenlianbo/tasks/${id}/summarize`, { method: 'POST' });
+  },
+  getXinwenlianboConfig() {
+    return request('/api/xinwenlianbo/config');
+  },
+
+  // Email verification & password
+  verifyEmail(token) {
+    return request('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+  },
+  resendVerification() {
+    return request('/api/auth/resend-verification', { method: 'POST' });
+  },
+  forgotPassword(email) {
+    return request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  },
+  resetPassword(token, password) {
+    return request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+  },
+  changePassword(oldPassword, newPassword) {
+    return request('/api/auth/change-password', {
+      method: 'PUT',
+      body: JSON.stringify({ oldPassword, newPassword })
+    });
+  },
+
+  // Likes
+  toggleLike(articleId) {
+    return request(`/api/articles/${articleId}/likes`, { method: 'POST' });
+  },
+  getLikes(articleId, page = 1, limit = 20) {
+    return request(`/api/articles/${articleId}/likes?page=${page}&limit=${limit}`);
+  },
+  hasLiked(articleId) {
+    return request(`/api/articles/${articleId}/likes/liked`);
+  },
+
+  // Comments
+  postComment(articleId, content) {
+    return request(`/api/articles/${articleId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
+  },
+  postReply(commentId, content) {
+    return request(`/api/comments/${commentId}/reply`, { method: 'POST', body: JSON.stringify({ content }) });
+  },
+  getComments(articleId) {
+    return request(`/api/articles/${articleId}/comments`);
+  },
+  deleteComment(commentId) {
+    return request(`/api/comments/${commentId}`, { method: 'DELETE' });
+  },
+  reportComment(commentId, reason) {
+    return request(`/api/comments/${commentId}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+  },
+  getReportedComments() {
+    return request('/api/comments/reported');
+  },
+  clearCommentReports(commentId) {
+    return request(`/api/comments/${commentId}/clear-reports`, { method: 'POST' });
+  },
+
+  // Hot ranking
+  getTrends({ refresh = false, signal } = {}) {
+    return request(`/api/trends${refresh ? '?refresh=1' : ''}`, { signal });
+  },
+
+  getHotArticles(range = 'today', page = 1, limit = 20) {
+    return request(`/api/articles/hot?view=card&range=${range}&page=${page}&limit=${limit}`);
+  },
+  getHotSidebar(range = 'today') {
+    return request(`/api/articles/hot-sidebar?view=card&range=${range}`);
+  },
+
+  // Profile
+  getProfile() {
+    return request('/api/users/profile');
+  },
+  updateProfile(profile) {
+    return request('/api/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile)
+    });
+  },
+  uploadAvatar(file) {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return request('/api/users/avatar', {
+      method: 'POST',
+      body: formData
+    });
   }
 };

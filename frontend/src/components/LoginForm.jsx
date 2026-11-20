@@ -85,6 +85,9 @@ export default function LoginForm({ onLogin }) {
       <p className="mt-4 text-center text-sm text-gray-600">
         还没有账号？<Link to="/register" className="text-blue-600 hover:underline">立即注册</Link>
       </p>
+      <p className="mt-2 text-center text-sm">
+        <Link to="/forgot-password" className="text-blue-600 hover:underline">忘记密码？</Link>
+      </p>
       {!adminLogin && <div className="mt-6 border-t pt-4 text-center">
         {wechatEnabled ? <><a href="/news/api/wechat/auth/start" className="block rounded-md bg-green-600 px-4 py-2 text-sm text-white">微信一键登录</a><p className="mt-2 text-xs text-gray-500">请在微信中打开，使用公众号网页授权登录。</p></> : <p className="text-sm text-gray-500">当前未开放微信授权登录，可使用邮箱登录或直接浏览新闻。</p>}
       </div>}
