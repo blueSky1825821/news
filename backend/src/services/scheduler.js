@@ -231,6 +231,10 @@ export function startXinwenlianboScheduler() {
   }
 
   const cronExpression = process.env.XINWENLIANBO_CRON || '0 19 * * *';
+  if (!cron.validate(cronExpression)) {
+    console.error('[Xinwenlianbo] Invalid XINWENLIANBO_CRON. Recording scheduler was not started.');
+    return;
+  }
 
   xinwenlianboTask = cron.schedule(cronExpression, async () => {
     try {

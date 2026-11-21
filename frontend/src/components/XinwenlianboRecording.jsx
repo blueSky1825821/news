@@ -6,6 +6,15 @@ import XinwenlianboHistory, { RECORDING_LABELS } from './XinwenlianboHistory.jsx
 
 const RUNNING = new Set(['recording', 'finishing', 'stopping', 'transcribing', 'summarizing']);
 const STEPS = ['录制', '转录', '提取标题与摘要'];
+const PROCESSING_LABELS = {
+  transcribing: '正在转录音频',
+  'extract-headlines': '正在提取片头标题',
+  'summary-request': '正在等待摘要服务响应',
+  'summary-response': '正在读取摘要服务响应',
+  'validate-summary': '正在校验摘要',
+  'summary-fallback': '正在根据转录文本生成摘要',
+  'publish-summary': '正在保存摘要'
+};
 const PHASE = { recording: 0, finishing: 0, transcribing: 1, summarizing: 2, completed: 3 };
 
 export default function XinwenlianboRecording({ refresh = 0 }) {
@@ -74,6 +83,10 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
   const captured = task?.capturedSeconds;
   const progress = status === 'recording' && plannedSeconds > 0;
   const phase = PHASE[status] ?? -1;
+  const processing = task?.progress;
+  const processingLabel = PROCESSING_LABELS[processing?.step] ??
+    (status === 'transcribing' ? '正在转录音频' : '正在生成摘要');
+  const transcriptionPercent = status === 'transcribing' ? processing?.percent : null;
 
   return (
     <>
@@ -84,7 +97,7 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
             {task?.date && `${task.date} · `}{task ? RECORDING_LABELS[status] ?? status : '正在获取状态…'}
           </p>
         </div>
-        <p className="mt-1 text-sm text-gray-600">手动录制从当前直播开始，录制结束后自动转录、提取标题并生成摘要。留存音频超过 15 天后自动清理。</p>
+        <p className="mt-1 text-sm text-gray-600">手动录制从当前直播开始。录制期间同步转录，全文转录完成后自动提取标题并生成摘要。留存音频超过 15 天后自动清理。</p>
         <ol className="my-4 flex flex-wrap gap-2 text-sm" aria-label="录制处理步骤">
           {STEPS.map((label, index) => (
             <li key={label} aria-current={phase === index ? 'step' : undefined}
@@ -101,6 +114,19 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
               {captured > 0
                 ? `已收录 ${Math.floor(captured / 60)} 分 ${captured % 60} 秒`
                 : '正在等待直播音频'} · 计划 {task.durationMinutes} 分钟
+              {task.transcribedSeconds > 0 &&
+                ` · 已转录 ${Math.floor(task.transcribedSeconds / 60)} 分 ${task.transcribedSeconds % 60} 秒`}
+            </p>
+          </div>
+        )}
+        {(status === 'transcribing' || status === 'summarizing') && (
+          <div className="mb-4">
+            <progress className="block h-2 w-full accent-blue-600" max={100}
+              value={transcriptionPercent ?? undefined} aria-label={processingLabel} />
+            <p className="mt-2 text-xs text-gray-600">
+              {processingLabel}
+              {transcriptionPercent != null && ` · ${transcriptionPercent}%`}
+              {processing && ` · 当前步骤已用时 ${Math.floor(processing.elapsedSeconds / 60)} 分 ${processing.elapsedSeconds % 60} 秒`}
             </p>
           </div>
         )}

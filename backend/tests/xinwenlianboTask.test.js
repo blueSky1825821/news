@@ -18,7 +18,7 @@ jest.unstable_mockModule('../src/services/xinwenlianbo/summarizer.js', () => ({ 
 
 const { getXinwenlianboDate, getXinwenlianboStatus, getXinwenlianboRecord, listXinwenlianboRecords,
   startXinwenlianboSummary, startXinwenlianboTask, deleteXinwenlianboRecord, cleanupExpiredXinwenlianboAudio,
-  getXinwenlianboAudio, deleteXinwenlianboAudio } =
+  getXinwenlianboAudio, deleteXinwenlianboAudio, runXinwenlianboTask, stopXinwenlianboTask } =
   await import('../src/services/xinwenlianbo/orchestrator.js');
 
 describe('Xinwenlianbo recording task', () => {
@@ -37,6 +37,27 @@ describe('Xinwenlianbo recording task', () => {
     for (const [, , output] of record.mock.calls) rmSync(dirname(output), { recursive: true, force: true });
     closeDb();
     delete process.env.DB_PATH;
+  });
+
+  test('falls back to the original recording when adjacent transcripts cannot be joined', async () => {
+    record.mockImplementationOnce(async (_url, _duration, output) => {
+      const wav = Buffer.alloc(44 + 62 * 32_000);
+      wav.write('RIFF');
+      wav.write('WAVEfmt ', 8);
+      wav.writeUInt32LE(16, 16);
+      wav.write('data', 36);
+      writeFileSync(output, wav);
+    });
+    transcribe.mockResolvedValueOnce('第一部分正在播报新闻')
+      .mockResolvedValueOnce('另一段无法对齐的文字')
+      .mockResolvedValueOnce('整段识别结果');
+    const date = getXinwenlianboDate();
+
+    await expect(startXinwenlianboTask(date).completion).resolves.toMatchObject({ status: 'completed' });
+    expect(transcribe).toHaveBeenCalledTimes(3);
+    expect(transcribe.mock.calls[2][0]).toBe(record.mock.calls[0][2]);
+    expect(listXinwenlianboRecords(1, 10).items.map(({ id }) => getXinwenlianboRecord(id).transcript))
+      .toEqual(['整段识别结果']);
   });
 
   it('claims the pipeline once, completes it, and updates the same article on a forced retry', async () => {
@@ -92,6 +113,21 @@ describe('Xinwenlianbo recording task', () => {
     expect(getXinwenlianboStatus()).toMatchObject({ status: 'failed' });
     await expect(startXinwenlianboTask(date, { durationMinutes: 1 }).completion)
       .resolves.toMatchObject({ status: 'completed' });
+  });
+
+  it('keeps an incomplete scheduled recording without publishing a summary', async () => {
+    await expect(runXinwenlianboTask(getXinwenlianboDate())).rejects.toThrow('定时录制提前结束');
+    expect(transcribe).not.toHaveBeenCalled();
+    const [task] = listXinwenlianboRecords(1, 10).items;
+    expect(task.status).toBe('failed');
+    expect(getXinwenlianboAudio(task.id, task.audio[0].id)).toBe(record.mock.calls[0][2]);
+    expect(getDb().prepare('SELECT id FROM articles').all()).toEqual([]);
+  });
+
+  it('allows an administrator to finish a scheduled recording early', async () => {
+    const completion = runXinwenlianboTask(getXinwenlianboDate());
+    expect(stopXinwenlianboTask({ finish: true })).toMatchObject({ status: 'finishing' });
+    await expect(completion).resolves.toMatchObject({ status: 'completed' });
   });
   it('lists and summarizes a historical transcript without recording again', async () => {
     const date = '2025-06-02';

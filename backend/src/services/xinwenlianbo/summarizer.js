@@ -1,4 +1,4 @@
-export async function summarize(transcript, config) {
+export async function summarize(transcript, config, onStage = () => {}) {
   const prompt = `根据新闻联播转录提取主要新闻标题和摘要。
 优先参考节目开头的内容提要，并用正文核对人名、地名、机构和数字。
 按照播出顺序为每条主要新闻写一个独立、可直接播读的标题。保留关键事实，合并重复报道，
@@ -13,6 +13,7 @@ ${transcript}`;
   const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
   try {
+    onStage('summary-request');
     const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: {
@@ -27,14 +28,25 @@ ${transcript}`;
       signal: controller.signal
     });
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
+      throw new Error(`LLM API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    onStage('summary-response');
+    const data = await response.json().catch(err => {
+      if (err instanceof SyntaxError) throw new Error('摘要服务响应不是有效 JSON');
+      throw err;
+    });
     const content = data.choices?.[0]?.message?.content?.trim() || '';
     const json = content.match(/\{[\s\S]*\}/)?.[0];
     if (!json) throw new Error('摘要服务未返回 JSON 对象');
-    return JSON.parse(json);
+    try {
+      return JSON.parse(json);
+    } catch {
+      throw new Error('摘要服务返回的摘要 JSON 格式无效');
+    }
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error('摘要服务请求超时（120 秒）', { cause: err });
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }

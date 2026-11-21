@@ -5,6 +5,7 @@ import { getDb, withWriteTransaction } from '../../db.js';
 import { getSetting } from '../../models/settings.js';
 import { startRecording, stopRecording } from './recorder.js';
 import { transcribe } from './transcriber.js';
+import { startLiveTranscription } from './liveTranscription.js';
 import { summarize } from './summarizer.js';
 import { extractOpeningHeadlines, normalizeHeadlines } from './headlines.js';
 import { insertArticle } from '../../models/article.js';
@@ -35,6 +36,53 @@ const RUNNING = new Set(['recording', 'finishing', 'stopping', 'transcribing', '
 const AUDIO_BYTES_PER_SECOND = 32_000;
 const AUDIO_RETENTION_DAYS = 15;
 let activeTask = null;
+
+function logStepFailure(date, step, err, elapsedSeconds, context = {}) {
+  const details = [];
+  for (let error = err; error && details.length < 4; error = error.cause) {
+    details.push({
+      code: error.code,
+      message: String(error.message ?? error).replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]').slice(-1500)
+    });
+  }
+  console.error('[Xinwenlianbo] Step failed', { date, step, elapsedSeconds, ...context, errors: details });
+}
+
+function beginStep(step, details = {}) {
+  const task = activeTask;
+  const now = Date.now();
+  const previousSeconds = task.progress ? Math.floor((now - task.progress.startedAt) / 1000) : undefined;
+  task.progress = { step, startedAt: now, percent: null };
+  console.log('[Xinwenlianbo] Step started', { date: task.date, step, previousSeconds, ...details });
+}
+
+function currentProgress() {
+  const progress = activeTask?.progress;
+  return progress && {
+    step: progress.step,
+    percent: progress.percent,
+    elapsedSeconds: Math.floor((Date.now() - progress.startedAt) / 1000)
+  };
+}
+
+function startProgressLogging() {
+  const timer = setInterval(() => {
+    const progress = currentProgress();
+    if (!progress) return;
+    console.log('[Xinwenlianbo] Step in progress', {
+      date: activeTask.date,
+      ...progress,
+      ...(progress.step === 'recording' && { capturedSeconds: statusAudioSeconds({ status: 'recording' }) })
+    });
+  }, 30_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+function logCurrentFailure(date, err) {
+  const progress = currentProgress();
+  logStepFailure(date, progress?.step ?? 'setup', err, progress?.elapsedSeconds);
+}
 
 function capturedAudioSeconds(audioPath) {
   if (!audioPath) return null;
@@ -67,6 +115,8 @@ export function getXinwenlianboStatus() {
     errorMessage: interrupted ? '录制任务已中断，请重新开始' : task?.errorMessage ?? null,
     durationMinutes: activeTask?.durationMinutes ?? null,
     capturedSeconds: statusAudioSeconds(task),
+    transcribedSeconds: activeTask?.transcribedSeconds ?? null,
+    progress: activeTask?.date === date && RUNNING.has(task?.status) ? currentProgress() ?? null : null,
     articleId: article?.id ?? null
   };
 }
@@ -95,7 +145,16 @@ function whisperAvailable(executable) {
   });
 }
 
-export function startXinwenlianboTask(date, { force = false, durationMinutes } = {}) {
+export function startXinwenlianboTask(date, options) {
+  try {
+    return prepareRecording(date, options);
+  } catch (err) {
+    if (![1002, 1003, 1004].includes(err.code)) logStepFailure(date, 'recording-setup', err);
+    throw err;
+  }
+}
+
+function prepareRecording(date, { force = false, durationMinutes, scheduled = false } = {}) {
   if (activeTask) throw taskError('已有新闻联播任务正在处理', 409, 1003);
 
   const config = getXinwenlianboConfig();
@@ -150,19 +209,23 @@ export function startXinwenlianboTask(date, { force = false, durationMinutes } =
       `).run(date, audioPath);
     });
   } catch (err) {
-    fs.rmSync(workDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      logStepFailure(date, 'cleanup', cleanupError);
+    }
     throw err;
   }
 
   activeTask = { date, durationMinutes: duration, audioPath };
-  const completion = processRecording({ date, config, duration, audioPath, workDir, sourceId: source.id, originalUrl: originalUrl.href })
+  const completion = processRecording({ date, config, duration, scheduled, audioPath, workDir, sourceId: source.id, originalUrl: originalUrl.href })
     .finally(() => { activeTask = null; });
   return { status: getXinwenlianboStatus(), completion };
 }
 
 export async function runXinwenlianboTask(date) {
   try {
-    return await startXinwenlianboTask(date).completion;
+    return await startXinwenlianboTask(date, { scheduled: true }).completion;
   } catch (err) {
     if ([1002, 1003, 1004].includes(err.code)) return { skipped: true };
     throw err;
@@ -171,11 +234,18 @@ export async function runXinwenlianboTask(date) {
 
 export function stopXinwenlianboTask({ finish = false } = {}) {
   const status = getXinwenlianboStatus();
-  if (status.status !== 'recording' || !activeTask || !stopRecording({ finish })) return null;
+  if (status.status !== 'recording' || !activeTask) return null;
 
   const next = finish ? 'finishing' : 'stopping';
-  getDb().prepare('UPDATE xinwenlianbo_tasks SET status = ? WHERE taskDate = ?').run(next, status.date);
-  return { ...status, status: next };
+  try {
+    if (!stopRecording({ finish })) return null;
+    beginStep(next);
+    getDb().prepare('UPDATE xinwenlianbo_tasks SET status = ? WHERE taskDate = ?').run(next, status.date);
+    return { ...status, status: next, progress: currentProgress() };
+  } catch (err) {
+    logStepFailure(status.date, next, err);
+    throw err;
+  }
 }
 
 function archiveTaskAudio(db, date) {
@@ -188,57 +258,106 @@ function archiveTaskAudio(db, date) {
   db.prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE taskDate = ?').run(date);
 }
 
-async function processRecording({ date, config, duration, audioPath, workDir, sourceId, originalUrl }) {
-  const db = getDb();
+async function processRecording({ date, config, duration, scheduled, audioPath, workDir, sourceId, originalUrl }) {
+  const stopProgressLogging = startProgressLogging();
   let retained = false;
+  let liveTranscription;
+  let capturedSeconds;
   try {
-    console.log(`[Xinwenlianbo] Starting recording for ${date}...`);
-    await startRecording(config.audioUrl, duration * 60, audioPath);
-    if (capturedAudioSeconds(audioPath) < 1) {
+    beginStep('recording', { scheduled, durationMinutes: duration });
+    const db = getDb();
+    const recording = startRecording(config.audioUrl, duration * 60, audioPath);
+    liveTranscription = startLiveTranscription(audioPath, config, (seconds, committed) => {
+      if (committed) activeTask.transcribedSeconds = Math.floor(seconds);
+      if (activeTask.progress.step === 'transcribing') {
+        activeTask.progress.percent = Math.min(100, Math.floor(seconds / capturedSeconds * 100));
+      }
+    });
+    await recording;
+    beginStep('recording-validation');
+    capturedSeconds = capturedAudioSeconds(audioPath);
+    if (capturedSeconds < 1) {
       throw new Error('未录到有效音频，请检查直播流并至少录制 1 秒');
     }
 
     if (config.keepAudio) {
+      beginStep('archive-audio', { capturedSeconds });
       withWriteTransaction(db => archiveTaskAudio(db, date));
       retained = true;
     }
+    // A short live stream can exit successfully. Allow modest timing
+    // differences, and honor an administrator's explicit early finish.
+    beginStep('recording-duration-check', { capturedSeconds });
+    const minimumSeconds = Math.ceil(duration * 60 * 0.9);
+    if (scheduled && capturedSeconds < minimumSeconds) {
+      const task = db.prepare('SELECT status FROM xinwenlianbo_tasks WHERE taskDate = ?').get(date);
+      if (task.status !== 'finishing') {
+        throw new Error(`定时录制提前结束，仅录到 ${capturedSeconds} 秒，至少需要 ${minimumSeconds} 秒`);
+      }
+    }
+    beginStep('transcribing');
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'transcribing' WHERE taskDate = ?").run(date);
-    console.log(`[Xinwenlianbo] Transcribing...`);
-    const transcript = (await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath)).trim();
+    if (activeTask.transcribedSeconds) {
+      activeTask.progress.percent = Math.min(100, Math.floor(activeTask.transcribedSeconds / capturedSeconds * 100));
+    }
+    const live = await liveTranscription.finish();
+    if (live.error) logStepFailure(date, 'live-transcription', live.error);
+    let transcript = live.transcript;
+    if (!transcript) {
+      activeTask.progress.percent = null;
+      activeTask.transcribedSeconds = null;
+      transcript = (await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath, percent => {
+        activeTask.progress.percent = percent;
+      })).trim();
+    }
     if (!transcript) throw new Error('没有转录到有效文字，请检查录音后重试');
 
+    beginStep('save-transcript', { transcriptLength: transcript.length });
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'summarizing', transcript = ? WHERE taskDate = ?")
       .run(transcript, date);
-    console.log(`[Xinwenlianbo] Summarizing...`);
 
     const summary = await buildSummary(transcript, config);
     return publishSummary({ date, sourceId, originalUrl, transcript, ...summary });
 
   } catch (err) {
     const status = err.code === 'RECORDING_CANCELLED' ? 'cancelled' : 'failed';
-    db.prepare("UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ?, completedAt = datetime('now') WHERE taskDate = ?")
-      .run(status, err.message, date);
+    if (status === 'cancelled') console.log('[Xinwenlianbo] Recording cancelled', { date });
+    else logCurrentFailure(date, err);
+    try {
+      getDb().prepare("UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ?, completedAt = datetime('now') WHERE taskDate = ?")
+        .run(status, err.message, date);
+    } catch (stateError) {
+      logStepFailure(date, 'save-task-status', stateError);
+      throw err;
+    }
     if (status === 'cancelled') return { status };
     throw err;
   } finally {
+    stopProgressLogging();
+    await liveTranscription?.cancel();
     if (!retained) {
       try {
         fs.rmSync(workDir, { recursive: true, force: true });
-        db.prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE taskDate = ?').run(date);
+        getDb().prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE taskDate = ?').run(date);
       } catch (err) {
-        console.error('[Xinwenlianbo] Temporary audio cleanup failed:', err.code || err.message);
+        logStepFailure(date, 'cleanup', err);
       }
     }
   }
 }
 
 async function buildSummary(transcript, config, { manual = false } = {}) {
+  beginStep('extract-headlines');
   const openingHeadlines = extractOpeningHeadlines(transcript);
   if (config.llmApiKey && config.llmApiUrl) {
     try {
+      beginStep('summary-request', { model: config.llmModel });
       const result = await summarize(transcript, {
         apiUrl: config.llmApiUrl, apiKey: config.llmApiKey, model: config.llmModel
+      }, step => {
+        if (step !== activeTask.progress.step) beginStep(step);
       });
+      beginStep('validate-summary');
       if (typeof result.summary !== 'string' || !result.summary.trim()) {
         throw new Error('摘要服务未返回有效正文');
       }
@@ -248,16 +367,18 @@ async function buildSummary(transcript, config, { manual = false } = {}) {
         headlines: JSON.stringify(headlines.length ? headlines : openingHeadlines)
       };
     } catch (err) {
-      console.error('[Xinwenlianbo] LLM summarization failed:', err.message);
-      if (manual) throw new Error('摘要生成失败，请检查模型配置后重试');
+      if (manual) throw new Error('摘要生成失败，请检查模型配置后重试', { cause: err });
+      logCurrentFailure(activeTask.date, err);
     }
   }
+  beginStep('summary-fallback', { reason: config.llmApiKey && config.llmApiUrl ? 'request-failed' : 'missing-configuration' });
   return { summary: transcript.slice(0, 500), headlines: JSON.stringify(openingHeadlines) };
 }
 
 function publishSummary({ date, sourceId, originalUrl, transcript, summary, headlines }) {
   const title = `${date} 新闻联播摘要`;
-  return withWriteTransaction(db => {
+  beginStep('publish-summary');
+  const result = withWriteTransaction(db => {
     const existing = db.prepare('SELECT id FROM articles WHERE sourceId = ? AND title = ? ORDER BY id DESC LIMIT 1')
       .get(sourceId, title);
     const articleId = existing?.id ?? insertArticle({
@@ -277,6 +398,8 @@ function publishSummary({ date, sourceId, originalUrl, transcript, summary, head
     `).run(summary, headlines, date);
     return { articleId, status: 'completed' };
   });
+  console.log('[Xinwenlianbo] Task completed', { date, articleId: result.articleId, ...currentProgress() });
+  return result;
 }
 
 const historyFields = `
@@ -360,6 +483,15 @@ export function getXinwenlianboRecord(id) {
 }
 
 export function startXinwenlianboSummary(id) {
+  try {
+    return prepareSummary(id);
+  } catch (err) {
+    if (err.code !== 1003) logStepFailure(undefined, 'summary-setup', err, undefined, { taskId: id });
+    throw err;
+  }
+}
+
+function prepareSummary(id) {
   if (activeTask) throw taskError('已有新闻联播任务正在处理', 409, 1003);
   const db = getDb();
   const record = getXinwenlianboRecord(id);
@@ -385,14 +517,23 @@ export function startXinwenlianboSummary(id) {
 
   db.prepare("UPDATE xinwenlianbo_tasks SET status = 'summarizing', errorMessage = NULL WHERE id = ?").run(id);
   activeTask = { date };
+  const stopProgressLogging = startProgressLogging();
   const completion = buildSummary(transcript, config, { manual: true })
     .then(summary => publishSummary({ date, sourceId: source.sourceId, originalUrl, transcript, ...summary }))
     .catch(err => {
-      db.prepare('UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ? WHERE id = ?')
-        .run(record.status, err.message, id);
+      logCurrentFailure(date, err);
+      try {
+        db.prepare('UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ? WHERE id = ?')
+          .run(record.status, err.message, id);
+      } catch (stateError) {
+        logStepFailure(date, 'save-task-status', stateError);
+      }
       throw err;
     })
-    .finally(() => { activeTask = null; });
+    .finally(() => {
+      stopProgressLogging();
+      activeTask = null;
+    });
 
   return { status: getXinwenlianboStatus(), completion };
 }
