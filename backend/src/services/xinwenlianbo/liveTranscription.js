@@ -97,9 +97,10 @@ export function startLiveTranscription(audioPath, config, onProgress) {
             const segment = (await transcribe(windowPath, config.whisperExecutable, config.whisperModelPath, percent => {
               onProgress((covered + (end - covered) * percent / 100) / BYTES_PER_SECOND, false);
             }, controller.signal)).trim();
+            if (!segment) throw new Error('录音分段未识别到文字');
             transcript = transcript === undefined ? segment : mergeTranscript(transcript, segment);
             covered = end;
-            onProgress(covered / BYTES_PER_SECOND, true);
+            onProgress(covered / BYTES_PER_SECOND, true, transcript);
             start = end - OVERLAP_SECONDS * BYTES_PER_SECOND;
             continue;
           }

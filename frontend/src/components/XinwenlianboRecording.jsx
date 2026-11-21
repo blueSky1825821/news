@@ -117,6 +117,7 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
               {task.transcribedSeconds > 0 &&
                 ` · 已转录 ${Math.floor(task.transcribedSeconds / 60)} 分 ${task.transcribedSeconds % 60} 秒`}
             </p>
+            {!task.transcriptPreview && <p className="mt-1 text-xs text-gray-600">录满首个 60 秒分段后开始识别。</p>}
           </div>
         )}
         {(status === 'transcribing' || status === 'summarizing') && (
@@ -129,6 +130,14 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
               {processing && ` · 当前步骤已用时 ${Math.floor(processing.elapsedSeconds / 60)} 分 ${processing.elapsedSeconds % 60} 秒`}
             </p>
           </div>
+        )}
+        {running && task?.transcriptPreview && (
+          <section className="mb-4 rounded-lg bg-gray-50 p-3" aria-label="转录预览">
+            <h3 className="text-sm font-medium text-gray-700">转录预览</h3>
+            <p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-gray-700">
+              {task.transcriptPreview}
+            </p>
+          </section>
         )}
         {statusError && <p role="alert" className="mb-3 text-sm text-red-700">暂时无法获取任务状态，正在重试。</p>}
         {config?.error && <p role="alert" className="mb-3 text-sm text-red-700">录制配置加载失败，请点击页面的「刷新」。</p>}

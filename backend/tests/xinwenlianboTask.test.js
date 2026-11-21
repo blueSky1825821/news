@@ -39,7 +39,7 @@ describe('Xinwenlianbo recording task', () => {
     delete process.env.DB_PATH;
   });
 
-  test('falls back to the original recording when adjacent transcripts cannot be joined', async () => {
+  test.each(['另一段无法对齐的文字', '  '])('falls back to the original recording for unusable segment %j', async segment => {
     record.mockImplementationOnce(async (_url, _duration, output) => {
       const wav = Buffer.alloc(44 + 62 * 32_000);
       wav.write('RIFF');
@@ -49,7 +49,13 @@ describe('Xinwenlianbo recording task', () => {
       writeFileSync(output, wav);
     });
     transcribe.mockResolvedValueOnce('第一部分正在播报新闻')
-      .mockResolvedValueOnce('另一段无法对齐的文字')
+      .mockImplementationOnce(async () => {
+        expect(getXinwenlianboStatus()).toMatchObject({
+          transcribedSeconds: 60,
+          transcriptPreview: '第一部分正在播报新闻'
+        });
+        return segment;
+      })
       .mockResolvedValueOnce('整段识别结果');
     const date = getXinwenlianboDate();
 

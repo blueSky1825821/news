@@ -116,6 +116,7 @@ export function getXinwenlianboStatus() {
     durationMinutes: activeTask?.durationMinutes ?? null,
     capturedSeconds: statusAudioSeconds(task),
     transcribedSeconds: activeTask?.transcribedSeconds ?? null,
+    transcriptPreview: activeTask?.transcriptPreview ?? null,
     progress: activeTask?.date === date && RUNNING.has(task?.status) ? currentProgress() ?? null : null,
     articleId: article?.id ?? null
   };
@@ -267,8 +268,11 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
     beginStep('recording', { scheduled, durationMinutes: duration });
     const db = getDb();
     const recording = startRecording(config.audioUrl, duration * 60, audioPath);
-    liveTranscription = startLiveTranscription(audioPath, config, (seconds, committed) => {
-      if (committed) activeTask.transcribedSeconds = Math.floor(seconds);
+    liveTranscription = startLiveTranscription(audioPath, config, (seconds, committed, transcript) => {
+      if (committed) {
+        activeTask.transcribedSeconds = Math.floor(seconds);
+        activeTask.transcriptPreview = transcript.slice(-2000);
+      }
       if (activeTask.progress.step === 'transcribing') {
         activeTask.progress.percent = Math.min(100, Math.floor(seconds / capturedSeconds * 100));
       }
@@ -312,6 +316,7 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
     }
     if (!transcript) throw new Error('没有转录到有效文字，请检查录音后重试');
 
+    activeTask.transcriptPreview = transcript.slice(-2000);
     beginStep('save-transcript', { transcriptLength: transcript.length });
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'summarizing', transcript = ? WHERE taskDate = ?")
       .run(transcript, date);

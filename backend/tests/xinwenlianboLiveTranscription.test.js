@@ -48,7 +48,10 @@ test('transcribes a full window before recording ends and includes overlapping a
     expect(wav.readUInt32LE(40)).toBe(60 * 32_000);
     await appendFile(audioPath, Buffer.alloc(2 * 32_000, 34));
     await expect(worker.finish()).resolves.toEqual({ transcript: '接下来报道，今天上午代表团抵达北京。' });
-    expect(progress.mock.calls).toEqual([[60, true], [62, true]]);
+    expect(progress.mock.calls).toEqual([
+      [60, true, '接下来报道，今天上午，代表团'],
+      [62, true, '接下来报道，今天上午代表团抵达北京。']
+    ]);
     expect(await readdir(directory)).toEqual(['recording.wav']);
   } finally {
     await worker.cancel();
