@@ -49,13 +49,14 @@ if [ ! -f "$ROOT_DIR/frontend/dist/index.html" ]; then
 fi
 echo "  Build output verified"
 
-# Step 5: Start server
-printf "\n[5/5] Starting server...\n"
+# Step 5: Stop the previous server, then start the new one
+printf "\n[5/5] Restarting server...\n"
+bash "$SCRIPT_DIR/stop.sh"
 export NODE_ENV=production
 printf "\nServer starting on http://0.0.0.0:3000\n"
 printf "Access via: http://<your-ip>:3000\n"
 printf "Logs: %s\n" "$ROOT_DIR/scripts/deploy.log"
-printf "Stop: kill %s\n" "$(cat "$ROOT_DIR/scripts/server.pid" 2>/dev/null || true)"
+printf "Stop: bash %s\n" "$SCRIPT_DIR/stop.sh"
 cd "$ROOT_DIR/backend"
 nohup node src/server.js > "$ROOT_DIR/scripts/deploy.log" 2>&1 &
 echo $! > "$ROOT_DIR/scripts/server.pid"

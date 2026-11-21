@@ -4,22 +4,37 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$SCRIPT_DIR/server.pid"
 
-if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE")
-    if kill -0 "$PID" 2>/dev/null; then
-        echo "Stopping server (PID: $PID)..."
-        kill -TERM "$PID"
-        sleep 2
-        if kill -0 "$PID" 2>/dev/null; then
-            echo "Server still running, force killing..."
-            kill -KILL "$PID"
-        fi
-        echo "Server stopped."
-    else
-        echo "Server not running (stale PID file)."
-    fi
-    rm -f "$PID_FILE"
-else
-    echo "PID file not found. Is the server running?"
-    echo "You can also stop it manually: pkill -f 'node src/server.js'"
+BACKEND_DIR="$(cd "$SCRIPT_DIR/../backend" && pwd -P)"
+
+is_server() {
+    [[ "$PID" =~ ^[1-9][0-9]*$ ]] || return 1
+    [[ "$(readlink "/proc/$PID/cwd" 2>/dev/null)" == "$BACKEND_DIR" ]] || return 1
+    local -a args
+    mapfile -d '' -t args < "/proc/$PID/cmdline" 2>/dev/null || return 1
+    [[ ${#args[@]} -eq 2 && "${args[0]##*/}" == node && "${args[1]}" == src/server.js ]]
+}
+
+if [ ! -f "$PID_FILE" ]; then
+    exit 0
 fi
+
+PID=$(cat "$PID_FILE")
+if is_server; then
+    echo "Stopping server (PID: $PID)..."
+    if ! kill -TERM "$PID" && is_server; then
+        exit 1
+    fi
+    # The server allows up to 10 seconds for graceful shutdown.
+    for ((attempt = 0; attempt < 60; attempt++)); do
+        is_server || break
+        sleep 0.2
+    done
+    if is_server; then
+        echo "Server (PID: $PID) did not stop within 12 seconds." >&2
+        exit 1
+    fi
+    echo "Server stopped."
+else
+    echo "No matching server process for the recorded PID."
+fi
+rm -f "$PID_FILE"
