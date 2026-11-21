@@ -69,12 +69,10 @@ export function mergeTranscript(previous, next) {
 export function startLiveTranscription(audioPath, config, onProgress) {
   const controller = new AbortController();
   const windowPath = path.join(path.dirname(audioPath), 'transcription-window.wav');
-  let finished = false;
   const result = processAudio().catch(error => ({ error }));
 
   async function processAudio() {
     let start = 0;
-    let covered = 0;
     let transcript;
     let dataOffset;
     let file;
@@ -87,26 +85,18 @@ export function startLiveTranscription(audioPath, config, onProgress) {
         }
         dataOffset ??= file && await audioDataOffset(file);
         if (dataOffset) {
-          const bytes = (await file.stat()).size - dataOffset;
-          const available = Math.floor(bytes / 2) * 2;
-          const end = Math.min(start + WINDOW_SECONDS * BYTES_PER_SECOND, available);
-          if (end > covered && (finished || end - start === WINDOW_SECONDS * BYTES_PER_SECOND)) {
-            // For a short recording, the finalized WAV is already a complete window.
-            if (finished && start === 0 && end === available) return {};
+          const end = start + WINDOW_SECONDS * BYTES_PER_SECOND;
+          if ((await file.stat()).size >= dataOffset + end) {
             await writeWindow(file, dataOffset + start, end - start, windowPath);
-            const segment = (await transcribe(windowPath, config.whisperExecutable, config.whisperModelPath, percent => {
-              onProgress((covered + (end - covered) * percent / 100) / BYTES_PER_SECOND, false);
-            }, controller.signal)).trim();
+            const segment = (await transcribe(windowPath, config.whisperExecutable, config.whisperModelPath,
+              undefined, controller.signal)).trim();
             if (!segment) throw new Error('录音分段未识别到文字');
             transcript = transcript === undefined ? segment : mergeTranscript(transcript, segment);
-            covered = end;
-            onProgress(covered / BYTES_PER_SECOND, true, transcript);
+            onProgress(end / BYTES_PER_SECOND, transcript);
             start = end - OVERLAP_SECONDS * BYTES_PER_SECOND;
             continue;
           }
-          if (finished && covered > 0) return { transcript };
         }
-        if (finished) return {};
         await delay(1000, undefined, { signal: controller.signal });
       }
       return {};
@@ -118,13 +108,9 @@ export function startLiveTranscription(audioPath, config, onProgress) {
   }
 
   return {
-    finish() {
-      finished = true;
-      return result;
-    },
     async cancel() {
       controller.abort();
-      await result;
+      return result;
     }
   };
 }

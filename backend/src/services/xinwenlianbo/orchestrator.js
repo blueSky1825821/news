@@ -268,14 +268,9 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
     beginStep('recording', { scheduled, durationMinutes: duration });
     const db = getDb();
     const recording = startRecording(config.audioUrl, duration * 60, audioPath);
-    liveTranscription = startLiveTranscription(audioPath, config, (seconds, committed, transcript) => {
-      if (committed) {
-        activeTask.transcribedSeconds = Math.floor(seconds);
-        activeTask.transcriptPreview = transcript.slice(-2000);
-      }
-      if (activeTask.progress.step === 'transcribing') {
-        activeTask.progress.percent = Math.min(100, Math.floor(seconds / capturedSeconds * 100));
-      }
+    liveTranscription = startLiveTranscription(audioPath, config, (seconds, transcript) => {
+      activeTask.transcribedSeconds = seconds;
+      activeTask.transcriptPreview = transcript.slice(-2000);
     });
     await recording;
     beginStep('recording-validation');
@@ -301,19 +296,14 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
     }
     beginStep('transcribing');
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'transcribing' WHERE taskDate = ?").run(date);
-    if (activeTask.transcribedSeconds) {
-      activeTask.progress.percent = Math.min(100, Math.floor(activeTask.transcribedSeconds / capturedSeconds * 100));
+    const preview = await liveTranscription.cancel();
+    if (preview.error && preview.error.name !== 'AbortError') {
+      logStepFailure(date, 'live-transcription', preview.error);
     }
-    const live = await liveTranscription.finish();
-    if (live.error) logStepFailure(date, 'live-transcription', live.error);
-    let transcript = live.transcript;
-    if (!transcript) {
-      activeTask.progress.percent = null;
-      activeTask.transcribedSeconds = null;
-      transcript = (await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath, percent => {
-        activeTask.progress.percent = percent;
-      })).trim();
-    }
+    activeTask.transcribedSeconds = null;
+    const transcript = (await transcribe(audioPath, config.whisperExecutable, config.whisperModelPath, percent => {
+      activeTask.progress.percent = percent;
+    })).trim();
     if (!transcript) throw new Error('没有转录到有效文字，请检查录音后重试');
 
     activeTask.transcriptPreview = transcript.slice(-2000);

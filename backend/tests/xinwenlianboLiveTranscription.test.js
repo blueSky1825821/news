@@ -15,7 +15,7 @@ test('merges matching speech with different punctuation and rejects uncertain jo
   expect(() => mergeTranscript('接下来报道今天上午', '代表团抵达北京')).toThrow('无法可靠衔接');
 });
 
-test('transcribes a full window before recording ends and includes overlapping audio in the final window', async () => {
+test('transcribes a full window before recording ends and includes overlapping audio in the next window', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'xwlb-live-test-'));
   const audioPath = path.join(directory, 'recording.wav');
   const header = Buffer.alloc(58);
@@ -35,22 +35,27 @@ test('transcribes a full window before recording ends and includes overlapping a
     return '接下来报道，今天上午，代表团';
   }).mockImplementationOnce(async windowPath => {
     const wav = await readFile(windowPath);
-    expect(wav.readUInt32LE(40)).toBe(8 * 32_000);
+    expect(wav.readUInt32LE(40)).toBe(60 * 32_000);
     expect(wav[44]).toBe(17);
     expect(wav[44 + 6 * 32_000]).toBe(34);
     return '今天上午代表团抵达北京。';
   });
 
-  const progress = jest.fn();
+  let secondWindowPublished;
+  const published = new Promise(resolve => { secondWindowPublished = resolve; });
+  const progress = jest.fn(seconds => {
+    if (seconds === 114) secondWindowPublished();
+  });
   const worker = startLiveTranscription(audioPath, {}, progress);
   try {
     const wav = await started;
     expect(wav.readUInt32LE(40)).toBe(60 * 32_000);
-    await appendFile(audioPath, Buffer.alloc(2 * 32_000, 34));
-    await expect(worker.finish()).resolves.toEqual({ transcript: '接下来报道，今天上午代表团抵达北京。' });
+    await appendFile(audioPath, Buffer.alloc(54 * 32_000, 34));
+    await published;
+    await worker.cancel();
     expect(progress.mock.calls).toEqual([
-      [60, true, '接下来报道，今天上午，代表团'],
-      [62, true, '接下来报道，今天上午代表团抵达北京。']
+      [60, '接下来报道，今天上午，代表团'],
+      [114, '接下来报道，今天上午代表团抵达北京。']
     ]);
     expect(await readdir(directory)).toEqual(['recording.wav']);
   } finally {

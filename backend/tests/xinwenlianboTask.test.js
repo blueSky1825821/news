@@ -39,29 +39,45 @@ describe('Xinwenlianbo recording task', () => {
     delete process.env.DB_PATH;
   });
 
-  test.each(['另一段无法对齐的文字', '  '])('falls back to the original recording for unusable segment %j', async segment => {
+  it('publishes the full recording transcript after cancelling an in-flight preview', async () => {
+    let finishRecording;
     record.mockImplementationOnce(async (_url, _duration, output) => {
-      const wav = Buffer.alloc(44 + 62 * 32_000);
+      const wav = Buffer.alloc(44 + 114 * 32_000);
       wav.write('RIFF');
       wav.write('WAVEfmt ', 8);
       wav.writeUInt32LE(16, 16);
       wav.write('data', 36);
       writeFileSync(output, wav);
+      await new Promise(resolve => { finishRecording = resolve; });
     });
+    let previewStopped = false;
     transcribe.mockResolvedValueOnce('第一部分正在播报新闻')
-      .mockImplementationOnce(async () => {
+      .mockImplementationOnce(async (_audio, _executable, _model, _onProgress, signal) => {
         expect(getXinwenlianboStatus()).toMatchObject({
           transcribedSeconds: 60,
           transcriptPreview: '第一部分正在播报新闻'
         });
-        return segment;
+        await new Promise(resolve => {
+          signal.addEventListener('abort', resolve, { once: true });
+          finishRecording();
+        });
+        previewStopped = true;
+        throw signal.reason;
       })
-      .mockResolvedValueOnce('整段识别结果');
+      .mockImplementationOnce(async (audio, _executable, _model, onProgress) => {
+        expect(previewStopped).toBe(true);
+        expect(audio).toBe(record.mock.calls[0][2]);
+        expect(getXinwenlianboStatus()).toMatchObject({
+          status: 'transcribing', transcribedSeconds: null, progress: { percent: null }
+        });
+        onProgress(40);
+        expect(getXinwenlianboStatus().progress.percent).toBe(40);
+        return '整段识别结果';
+      });
     const date = getXinwenlianboDate();
 
     await expect(startXinwenlianboTask(date).completion).resolves.toMatchObject({ status: 'completed' });
     expect(transcribe).toHaveBeenCalledTimes(3);
-    expect(transcribe.mock.calls[2][0]).toBe(record.mock.calls[0][2]);
     expect(listXinwenlianboRecords(1, 10).items.map(({ id }) => getXinwenlianboRecord(id).transcript))
       .toEqual(['整段识别结果']);
   });
