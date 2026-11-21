@@ -4,7 +4,8 @@ import { setSetting } from '../models/settings.js';
 import {
   getXinwenlianboConfig, getXinwenlianboDate, getXinwenlianboStatus,
   startXinwenlianboTask, stopXinwenlianboTask, listXinwenlianboRecords,
-  getXinwenlianboRecord, startXinwenlianboSummary, deleteXinwenlianboRecord
+  getXinwenlianboRecord, startXinwenlianboSummary, deleteXinwenlianboRecord,
+  getXinwenlianboAudio, deleteXinwenlianboAudio
 } from '../services/xinwenlianbo/orchestrator.js';
 
 const router = Router();
@@ -52,6 +53,30 @@ router.get('/tasks', (req, res, next) => {
     const page = positiveInteger(req.query.page, 1);
     const limit = Math.min(positiveInteger(req.query.limit, 20), 100);
     res.sendJson(0, 'success', listXinwenlianboRecords(page, limit));
+  } catch (err) {
+    next(err);
+  }
+});
+
+function audioId(value) {
+  return value === 'legacy' ? value : positiveInteger(value, 0);
+}
+
+router.get('/tasks/:id/audio/:audioId', (req, res, next) => {
+  try {
+    const file = getXinwenlianboAudio(positiveInteger(req.params.id, 0), audioId(req.params.audioId));
+    res.type('wav').sendFile(file, { cacheControl: false, headers: { 'Cache-Control': 'private, no-store' } }, err => {
+      if (err) next(err);
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/tasks/:id/audio/:audioId', (req, res, next) => {
+  try {
+    deleteXinwenlianboAudio(positiveInteger(req.params.id, 0), audioId(req.params.audioId));
+    res.sendJson(0, '录音已删除', null);
   } catch (err) {
     next(err);
   }

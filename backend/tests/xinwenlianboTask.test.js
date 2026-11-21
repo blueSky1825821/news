@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { jest } from '@jest/globals';
 import { closeDb, getDb } from '../src/db.js';
 import { setSetting } from '../src/models/settings.js';
@@ -17,7 +17,8 @@ jest.unstable_mockModule('../src/services/xinwenlianbo/transcriber.js', () => ({
 jest.unstable_mockModule('../src/services/xinwenlianbo/summarizer.js', () => ({ summarize }));
 
 const { getXinwenlianboDate, getXinwenlianboStatus, getXinwenlianboRecord, listXinwenlianboRecords,
-  startXinwenlianboSummary, startXinwenlianboTask, deleteXinwenlianboRecord, cleanupExpiredXinwenlianboAudio } =
+  startXinwenlianboSummary, startXinwenlianboTask, deleteXinwenlianboRecord, cleanupExpiredXinwenlianboAudio,
+  getXinwenlianboAudio, deleteXinwenlianboAudio } =
   await import('../src/services/xinwenlianbo/orchestrator.js');
 
 describe('Xinwenlianbo recording task', () => {
@@ -33,6 +34,7 @@ describe('Xinwenlianbo recording task', () => {
   });
 
   afterEach(() => {
+    for (const [, , output] of record.mock.calls) rmSync(dirname(output), { recursive: true, force: true });
     closeDb();
     delete process.env.DB_PATH;
   });
@@ -52,6 +54,36 @@ describe('Xinwenlianbo recording task', () => {
     await expect(next.completion).resolves.toMatchObject({ articleId, status: 'completed' });
     expect(getDb().prepare('SELECT id, transcript FROM articles').all())
       .toEqual([{ id: articleId, transcript: '更新的转录' }]);
+  });
+
+  it('preserves legacy and new audio on redo and removes only the selected clip', async () => {
+    const date = getXinwenlianboDate();
+    const directory = mkdtempSync(join(tmpdir(), 'xinwenlianbo-'));
+    const legacy = join(directory, 'recording.wav');
+    try {
+      writeFileSync(legacy, 'legacy recording');
+      const { lastInsertRowid: id } = getDb().prepare(`
+        INSERT INTO xinwenlianbo_tasks (taskDate, status, audioFilePath, startedAt)
+        VALUES (?, 'completed', ?, datetime('now'))
+      `).run(date, legacy);
+      expect(getXinwenlianboAudio(id, 'legacy')).toBe(legacy);
+
+      const retry = startXinwenlianboTask(date, { force: true, durationMinutes: 1 });
+      const [old] = listXinwenlianboRecords(1, 10).items[0].audio;
+      expect(getXinwenlianboAudio(id, old.id)).toBe(legacy);
+      const { articleId } = await retry.completion;
+      const [latest, previous] = listXinwenlianboRecords(1, 10).items[0].audio;
+      expect(previous).toEqual(old);
+      expect(getXinwenlianboAudio(id, latest.id)).toBe(record.mock.calls[0][2]);
+
+      deleteXinwenlianboAudio(id, old.id);
+      expect(existsSync(legacy)).toBe(false);
+      expect(() => getXinwenlianboAudio(id, old.id)).toThrow('录音文件不存在');
+      expect(listXinwenlianboRecords(1, 10).items[0].audio).toEqual([latest]);
+      expect(getXinwenlianboRecord(id)).toMatchObject({ transcript: '测试转录', articleId });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('allows retrying a task left running by a restart', async () => {

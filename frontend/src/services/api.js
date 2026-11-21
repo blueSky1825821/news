@@ -192,6 +192,18 @@ export const api = {
   getXinwenlianboTasks(page = 1, options = {}) {
     return request(`/api/xinwenlianbo/tasks?page=${page}`, options);
   },
+  async getXinwenlianboAudio(taskId, audioId, { signal } = {}) {
+    const token = localStorage.getItem('news-auth-token');
+    const res = await fetch(`${BASE_URL}/api/xinwenlianbo/tasks/${taskId}/audio/${audioId}`, {
+      signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) throw new Error('录音加载失败，请重试。');
+    return res.blob();
+  },
+  deleteXinwenlianboAudio(taskId, audioId) {
+    return request(`/api/xinwenlianbo/tasks/${taskId}/audio/${audioId}`, { method: 'DELETE' });
+  },
   getXinwenlianboRecord(id, options = {}) {
     return request(`/api/xinwenlianbo/tasks/${id}`, options);
   },

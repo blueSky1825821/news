@@ -3,6 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+whisper_install_dir="$(node -p 'require("node:path").resolve(process.argv[1])' "${INSTALL_DIR:-/opt}")"
 
 echo "============================================"
 echo "  AI News Broadcasting - Dev Mode"
@@ -21,7 +22,7 @@ echo "  Frontend dependencies ready"
 # Step 2: Start backend in background
 printf "\n[2/3] Starting backend server...\n"
 cd "$ROOT_DIR/backend"
-PORT=3001 npm run dev &
+WHISPER_MODEL_PATH="${WHISPER_MODEL_PATH:-$whisper_install_dir/whisper.cpp/models/ggml-large-v3-q5_0.bin}" PORT=3001 npm run dev &
 BACKEND_PID=$!
 echo "  Backend starting on http://localhost:3001 (PID: $BACKEND_PID)"
 

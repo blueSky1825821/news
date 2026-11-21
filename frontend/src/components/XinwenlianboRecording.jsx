@@ -141,7 +141,7 @@ export default function XinwenlianboRecording({ refresh = 0 }) {
         </div>
         {confirm && (
           <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            <p>{confirm === 'redo' ? '重新录制会从当前直播开始，成功后更新当天摘要。' : '取消后，本次录制不会生成摘要。'}</p>
+            <p>{confirm === 'redo' ? '重新录制会从当前直播开始，原录音会保留，成功后更新当天摘要。' : '取消后，本次录制不会生成摘要。'}</p>
             <div className="mt-2 flex gap-2">
               <button type="button" className="news-action" onClick={() => perform(confirm)}>确认</button>
               <button type="button" className="news-action" onClick={() => setConfirm(null)}>返回</button>

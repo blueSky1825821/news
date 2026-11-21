@@ -10,6 +10,7 @@ export async function transcribe(audioPath, whisperExecutable, modelPath) {
       '-m', modelPath,
       '-f', audioPath,
       '-l', 'zh',
+      '--prompt', '这是一段普通话电视节目，使用简体中文和标点符号。',
       '-otxt',
       '-of', outputPrefix,
       '-np'

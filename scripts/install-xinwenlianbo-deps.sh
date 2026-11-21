@@ -14,7 +14,7 @@ esac
 
 INSTALL_DIR="$(node -p 'require("node:path").resolve(process.argv[1])' "${INSTALL_DIR:-/opt}")"
 WHISPER_DIR="$INSTALL_DIR/whisper.cpp"
-MODEL_NAME="${WHISPER_MODEL:-base-q5_1}"
+MODEL_NAME="${WHISPER_MODEL:-large-v3-turbo-q5_0}"
 if [[ ! "$MODEL_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
     echo 'Invalid WHISPER_MODEL name.' >&2
     exit 1
@@ -139,8 +139,12 @@ if $needs_build || $needs_model; then
             exit 1
         fi
         [[ -s "$staged_model" ]]
-        if [[ "$MODEL_NAME" == base-q5_1 ]]; then
-            expected_sha256=422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898
+        expected_sha256=
+        case "$MODEL_NAME" in
+            large-v3-turbo-q5_0) expected_sha256=394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2 ;;
+            base-q5_1) expected_sha256=422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898 ;;
+        esac
+        if [[ -n "$expected_sha256" ]]; then
             if ! printf '%s  %s\n' "$expected_sha256" "$staged_model" |
                 "${install_command[@]}" sha256sum --check --status; then
                 echo '  Whisper model checksum verification failed.' >&2

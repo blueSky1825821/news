@@ -157,6 +157,15 @@ Linux 默认也会复用 FFmpeg、Whisper 和已有模型。Whisper 检查当前
 
 Linux 首次下载 Whisper 模型时默认使用 `https://hf-mirror.com`。可用 `HF_ENDPOINT=https://huggingface.co npm run deploy` 临时切换下载地址，或通过 `WHISPER_MODEL_PATH` 指向服务器上已有的模型文件。
 
+托管安装默认使用多语种模型 `large-v3-turbo-q5_0`（约 547 MiB）。已有安装若仍使用 `base-q5_1`，可在项目根目录执行以下命令下载新模型（以默认安装目录为例）。
+
+```bash
+WHISPER_MODEL_PATH=/opt/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin bash scripts/install-xinwenlianbo-deps.sh
+```
+
+下载完成后，将 `backend/.env` 中的 `WHISPER_MODEL_PATH` 改为新模型路径，再重启后端。CPU 转录可能比旧模型耗时更长。
+
+
 后端会将 `frontend/dist` 作为静态文件挂载到 `/news` 提供服务，并支持前端路由 fallback。访问 `http://localhost:3000/news/` 即可使用。
 
 ### 外网访问

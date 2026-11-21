@@ -24,6 +24,67 @@ function formatTime(value) {
   return value ? timeFormat.format(new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z')) : '—';
 }
 
+function RecordingAudio({ taskId, audio, disabled, onDeleted }) {
+  const [loading, setLoading] = useState(false);
+  const [url, setUrl] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!loading) return;
+    const controller = new AbortController();
+    api.getXinwenlianboAudio(taskId, audio.id, { signal: controller.signal })
+      .then(blob => {
+        if (!controller.signal.aborted) setUrl(URL.createObjectURL(blob));
+      })
+      .catch(err => { if (!controller.signal.aborted) setError(err.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [loading, taskId, audio.id]);
+
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
+  async function remove() {
+    setDeleting(true);
+    setError('');
+    try {
+      await api.deleteXinwenlianboAudio(taskId, audio.id);
+      onDeleted(taskId, audio.id);
+    } catch (err) {
+      setError(err.message || '录音删除失败，请重试。');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <li className="space-y-2 rounded-lg bg-gray-50 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>录音 · {formatTime(audio.startedAt)}</span>
+        {!url && <button type="button" className="news-action" disabled={loading || deleting}
+          onClick={() => { setError(''); setLoading(true); }}>{loading ? '正在加载录音…' : '播放录音'}</button>}
+        {!confirm && <button type="button" className="news-action text-red-700" disabled={disabled}
+          onClick={() => setConfirm(true)}>删除录音</button>}
+      </div>
+      {url && <audio className="w-full max-w-md" controls autoPlay src={url}
+        aria-label={`录音 ${formatTime(audio.startedAt)}`} onError={() => {
+          setUrl('');
+          setError('录音播放失败，请重试。');
+        }} />}
+      {confirm && (
+        <div className="flex flex-wrap items-center gap-2 text-red-800">
+          <span>确认删除这段录音？</span>
+          <button type="button" className="news-action" disabled={disabled || deleting}
+            onClick={remove}>{deleting ? '正在删除…' : '确认删除录音'}</button>
+          <button type="button" className="news-action" disabled={deleting}
+            onClick={() => setConfirm(false)}>取消</button>
+        </div>
+      )}
+      {error && <p role="alert" className="text-red-700">{error}</p>}
+    </li>
+  );
+}
+
 function RecordContent({ id, status, revision }) {
   const [record, setRecord] = useState(null);
   const [error, setError] = useState(false);
@@ -144,6 +205,17 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange 
     }
   }
 
+  function removeAudio(taskId, audioId) {
+    setResult(current => current && {
+      ...current,
+      items: current.items.map(record => record.id === taskId
+        ? { ...record, audio: record.audio.filter(audio => audio.id !== audioId) }
+        : record)
+    });
+    setAttempt(value => value + 1);
+    setNotice('录音已删除。');
+  }
+
   function showPage(nextPage) {
     setPage(nextPage);
     setResult(null);
@@ -201,6 +273,14 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange 
                     </button>
                   </div>
                 </div>
+                {!!record.audio?.length && (
+                  <ul className="mt-3 space-y-2" aria-label={`${record.taskDate} 的录音`}>
+                    {record.audio.map(audio => (
+                      <RecordingAudio key={audio.id} taskId={record.id} audio={audio}
+                        disabled={audio.processing || deleting || confirmingDelete} onDeleted={removeAudio} />
+                    ))}
+                  </ul>
+                )}
                 {confirmingDelete && (
                   <div className="mt-3 space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-800">
                     <p>确认删除 {record.taskDate} 的录制记录、转录和留存音频？此操作不可撤销。</p>

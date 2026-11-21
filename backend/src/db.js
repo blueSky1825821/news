@@ -161,6 +161,14 @@ export function initSchema(db) {
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS xinwenlianbo_audio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskId INTEGER NOT NULL REFERENCES xinwenlianbo_tasks(id) ON DELETE CASCADE,
+      audioFilePath TEXT NOT NULL UNIQUE,
+      startedAt DATETIME
+    );
+    CREATE INDEX IF NOT EXISTS idx_xinwenlianbo_audio_task ON xinwenlianbo_audio(taskId, id DESC);
+
     CREATE TABLE IF NOT EXISTS email_verification_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,

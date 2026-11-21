@@ -23,6 +23,9 @@ echo "============================================"
 
 # Step 1: Install xinwenlianbo system dependencies (ffmpeg + whisper.cpp)
 printf "\n[1/5] Checking xinwenlianbo dependencies...\n"
+export WHISPER_MODEL="${WHISPER_MODEL:-large-v3-q5_0}"
+whisper_install_dir="$(node -p 'require("node:path").resolve(process.argv[1])' "${INSTALL_DIR:-/opt}")"
+export WHISPER_MODEL_PATH="${WHISPER_MODEL_PATH:-$whisper_install_dir/whisper.cpp/models/ggml-$WHISPER_MODEL.bin}"
 bash "$SCRIPT_DIR/install-xinwenlianbo-deps.sh" "${system_flags[@]}"
 
 # Step 2: Build frontend
