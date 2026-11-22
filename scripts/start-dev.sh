@@ -2,48 +2,49 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/log.sh"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 whisper_install_dir="$(node -p 'require("node:path").resolve(process.argv[1])' "${INSTALL_DIR:-/opt}")"
 
-echo "============================================"
-echo "  AI News Broadcasting - Dev Mode"
-echo "============================================"
+log_message "============================================"
+log_message "  AI News Broadcasting - Dev Mode"
+log_message "============================================"
 
 # Step 1: Install dependencies
-printf "\n[1/3] Installing dependencies...\n"
+log_message "[1/3] Installing dependencies..."
 cd "$ROOT_DIR/backend"
 npm install >/dev/null 2>&1
-echo "  Backend dependencies ready"
+log_message "  Backend dependencies ready"
 
 cd "$ROOT_DIR/frontend"
 npm install >/dev/null 2>&1
-echo "  Frontend dependencies ready"
+log_message "  Frontend dependencies ready"
 
 # Step 2: Start backend in background
-printf "\n[2/3] Starting backend server...\n"
+log_message "[2/3] Starting backend server..."
 cd "$ROOT_DIR/backend"
 WHISPER_MODEL_PATH="${WHISPER_MODEL_PATH:-$whisper_install_dir/whisper.cpp/models/ggml-large-v3-q5_0.bin}" PORT=3001 npm run dev &
 BACKEND_PID=$!
-echo "  Backend starting on http://localhost:3001 (PID: $BACKEND_PID)"
+log_message "  Backend starting on http://localhost:3001 (PID: $BACKEND_PID)"
 
 sleep 2
 
 # Step 3: Start frontend in background
-printf "\n[3/3] Starting frontend dev server...\n"
+log_message "[3/3] Starting frontend dev server..."
 cd "$ROOT_DIR/frontend"
 npm run dev &
 FRONTEND_PID=$!
-echo "  Frontend starting on http://localhost:3000/news/ (PID: $FRONTEND_PID)"
+log_message "  Frontend starting on http://localhost:3000/news/ (PID: $FRONTEND_PID)"
 
-echo ""
-echo "============================================"
-echo "  Both services are starting..."
-echo "  Frontend: http://0.0.0.0:3000/news/"
-echo "  Backend:  http://0.0.0.0:3001"
-echo "  Access via: http://<your-ip>:3000/news/"
-echo "============================================"
-echo ""
-echo "Press Ctrl+C to stop all services."
+printf '\n'
+log_message "============================================"
+log_message "  Both services are starting..."
+log_message "  Frontend: http://0.0.0.0:3000/news/"
+log_message "  Backend:  http://0.0.0.0:3001"
+log_message "  Access via: http://<your-ip>:3000/news/"
+log_message "============================================"
+printf '\n'
+log_message "Press Ctrl+C to stop all services."
 
 # Wait for interrupt
 trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT

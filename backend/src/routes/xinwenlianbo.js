@@ -1,3 +1,4 @@
+import { logConsole } from '../utils/logger.js';
 import { Router } from 'express';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 import { setSetting } from '../models/settings.js';
@@ -27,7 +28,7 @@ router.post('/trigger', (req, res, next) => {
       force: req.query.force === 'true',
       durationMinutes
     });
-    completion.catch(err => console.error('[Xinwenlianbo] Manual task failed:', err.message));
+    completion.catch(err => logConsole('error', '[Xinwenlianbo] Manual task failed:', err.message));
     res.sendJson(0, '录制已开始', { ...status, taskDate: status.date });
   } catch (err) {
     next(err);
@@ -106,7 +107,7 @@ router.delete('/tasks/:id', (req, res, next) => {
 router.post('/tasks/:id/summarize', (req, res, next) => {
   try {
     const { status, completion } = startXinwenlianboSummary(positiveInteger(req.params.id, 0));
-    completion.catch(err => console.error('[Xinwenlianbo] Manual summary failed:', err.message));
+    completion.catch(err => logConsole('error', '[Xinwenlianbo] Manual summary failed:', err.message));
     res.status(202).sendJson(0, '正在生成新闻摘要', status);
   } catch (err) {
     next(err);

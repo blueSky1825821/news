@@ -14,13 +14,14 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
   }, [article.id, isAdmin]);
 
   const handleToggleFlag = async (e) => {
+    const triggeredAt = new Date().toISOString();
     e.preventDefault();
     e.stopPropagation();
     try {
       const result = await api.toggleFlagArticle(article.id);
       setIsFlagged(result.flagged);
     } catch (err) {
-      console.error('标记失败:', err);
+      console.error(`[triggeredAt=${triggeredAt}]`, '标记失败:', err);
     }
   };
 

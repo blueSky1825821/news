@@ -9,9 +9,10 @@ export default function UserSettings({ user, onUpdateCategories }) {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    const triggeredAt = new Date().toISOString();
     api.getCategories()
       .then((data) => setCategoryOptions(data.categories))
-      .catch((err) => console.error('Failed to load categories:', err));
+      .catch((err) => console.error(`[triggeredAt=${triggeredAt}]`, 'Failed to load categories:', err));
   }, []);
 
   useEffect(() => {

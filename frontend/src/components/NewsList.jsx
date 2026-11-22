@@ -34,9 +34,10 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
     api.getCategories()
       .then((data) => { if (active) setCategories(data?.categories || []); })
       .catch(() => { if (active) setCategoryError(true); });
+    const triggeredAt = new Date().toISOString();
     api.getSources()
       .then((data) => { if (active) setSources(data || []); })
-      .catch((err) => console.error('加载新闻来源失败', err));
+      .catch((err) => console.error(`[triggeredAt=${triggeredAt}]`, '加载新闻来源失败', err));
     return () => { active = false; };
   }, []);
 

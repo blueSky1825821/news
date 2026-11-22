@@ -1,3 +1,4 @@
+import { logConsole } from '../backend/src/utils/logger.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -54,8 +55,8 @@ function matchesLock() {
 }
 
 if (!reinstall && matchesLock() && npm(['ls', '--all', ...dependencyFlags], true) === 0) {
-  console.log('  Existing dependencies match package-lock.json; reusing them.');
+  logConsole('log', '  Existing dependencies match package-lock.json; reusing them.');
 } else {
-  console.log(reinstall ? '  Reinstalling dependencies...' : '  Dependencies are missing or outdated; installing...');
+  logConsole('log', reinstall ? '  Reinstalling dependencies...' : '  Dependencies are missing or outdated; installing...');
   process.exitCode = npm(['ci', ...dependencyFlags]) ?? 1;
 }

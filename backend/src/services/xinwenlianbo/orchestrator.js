@@ -1,3 +1,4 @@
+import { logConsole } from '../../utils/logger.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -46,7 +47,7 @@ function logStepFailure(date, step, err, elapsedSeconds, context = {}) {
       message: String(error.message ?? error).replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]').slice(-1500)
     });
   }
-  console.error('[Xinwenlianbo] Step failed', { date, step, elapsedSeconds, ...context, errors: details });
+  logConsole('error', '[Xinwenlianbo] Step failed', { date, step, elapsedSeconds, ...context, errors: details });
 }
 
 function beginStep(step, details = {}) {
@@ -54,7 +55,7 @@ function beginStep(step, details = {}) {
   const now = Date.now();
   const previousSeconds = task.progress ? Math.floor((now - task.progress.startedAt) / 1000) : undefined;
   task.progress = { step, startedAt: now, percent: null };
-  console.log('[Xinwenlianbo] Step started', { date: task.date, step, previousSeconds, ...details });
+  logConsole('log', '[Xinwenlianbo] Step started', { date: task.date, step, previousSeconds, ...details });
 }
 
 function currentProgress() {
@@ -70,7 +71,7 @@ function startProgressLogging() {
   const timer = setInterval(() => {
     const progress = currentProgress();
     if (!progress) return;
-    console.log('[Xinwenlianbo] Step in progress', {
+    logConsole('log', '[Xinwenlianbo] Step in progress', {
       date: activeTask.date,
       ...progress,
       ...(progress.step === 'recording' && { capturedSeconds: statusAudioSeconds({ status: 'recording' }) })
@@ -340,7 +341,7 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
 
   } catch (err) {
     const status = err.code === 'RECORDING_CANCELLED' ? 'cancelled' : 'failed';
-    if (status === 'cancelled') console.log('[Xinwenlianbo] Recording cancelled', { date });
+    if (status === 'cancelled') logConsole('log', '[Xinwenlianbo] Recording cancelled', { date });
     else logCurrentFailure(date, err);
     try {
       getDb().prepare("UPDATE xinwenlianbo_tasks SET status = ?, errorMessage = ?, completedAt = datetime('now') WHERE taskDate = ?")
@@ -417,7 +418,7 @@ function publishSummary({ date, sourceId, originalUrl, transcript, summary, head
     `).run(summary, headlines, date);
     return { articleId, status: 'completed' };
   });
-  console.log('[Xinwenlianbo] Task completed', { date, articleId: result.articleId, ...currentProgress() });
+  logConsole('log', '[Xinwenlianbo] Task completed', { date, articleId: result.articleId, ...currentProgress() });
   return result;
 }
 
@@ -582,7 +583,7 @@ function removeRecordingAudio(audioPath, date) {
     try {
       fs.rmdirSync(file.directory);
     } catch (err) {
-      if (err.code !== 'ENOTEMPTY') console.error('[Xinwenlianbo] Could not remove empty recording directory:', err.code);
+      if (err.code !== 'ENOTEMPTY') logConsole('error', '[Xinwenlianbo] Could not remove empty recording directory:', err.code);
     }
   }
 }
@@ -608,7 +609,7 @@ export function cleanupExpiredXinwenlianboAudio(now = new Date()) {
       removeRecordingAudio(audioFilePath, taskDate);
       cleared += (archived ? deleteAudio.run(id) : clearAudio.run(id, audioFilePath)).changes;
     } catch (err) {
-      console.error(`[Xinwenlianbo] Audio cleanup failed for task ${id}:`, err.code || err.message);
+      logConsole('error', `[Xinwenlianbo] Audio cleanup failed for task ${id}:`, err.code || err.message);
     }
   }
   return cleared;

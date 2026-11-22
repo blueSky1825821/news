@@ -4,7 +4,7 @@ import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
 import { wechatCapabilities } from './wechatConfig.js';
 import { getDb } from '../db.js';
-import { createLogger, elapsedMs, errorDetails } from '../utils/logger.js';
+import { createLogger, elapsedMs, errorDetails, getTriggeredAt, withLogTrigger } from '../utils/logger.js';
 import { crawlActiveRssSources } from './crawlService.js';
 import { cleanupOldArticles } from '../models/article.js';
 import { cleanupExpiredXinwenlianboAudio, getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
@@ -32,13 +32,14 @@ let task = null;
 
 export function startScheduler(cronExpression = '*/30 * * * *') {
   if (task) return;
-  task = cron.schedule(cronExpression, async () => {
+  task = cron.schedule(cronExpression, () => withLogTrigger(async () => {
+    const triggeredAt = getTriggeredAt();
     try {
-      await crawlActiveRssSources('scheduled');
+      await crawlActiveRssSources('scheduled', triggeredAt);
     } catch (err) {
-      logger.error('crawl.failed', errorDetails(err));
+      logger.error('crawl.failed', { triggeredAt, ...errorDetails(err) });
     }
-  }, {
+  }), {
     timezone: 'Asia/Shanghai'
   });
   logger.info('crawl.scheduled', { cronExpression });
@@ -59,20 +60,21 @@ export function startSummaryPushScheduler() {
   const settings = getWechatSettings();
   const cronExpression = settings?.summaryPushCron || '0 8 * * *';
 
-  summaryTask = cron.schedule(cronExpression, async () => {
+  summaryTask = cron.schedule(cronExpression, () => withLogTrigger(async () => {
+    const triggeredAt = getTriggeredAt();
     try {
       const startedAt = performance.now();
       if (!wechatCapabilities().massSendEnabled) {
-        logger.debug('summary.skipped', { reason: 'mass_send_unavailable' });
+        logger.debug('summary.skipped', { triggeredAt, reason: 'mass_send_unavailable' });
         return;
       }
       const settings = getWechatSettings();
       if (!settings || !settings.summaryPushEnabled) {
-        logger.debug('summary.skipped', { reason: 'disabled' });
+        logger.debug('summary.skipped', { triggeredAt, reason: 'disabled' });
         return;
       }
       if (!settings.appId || !settings.appSecret) {
-        logger.debug('summary.skipped', { reason: 'unconfigured' });
+        logger.debug('summary.skipped', { triggeredAt, reason: 'unconfigured' });
         return;
       }
 
@@ -84,11 +86,11 @@ export function startSummaryPushScheduler() {
 
       const flaggedIds = listFlaggedArticleIds();
       const result = await pushSummary(articles, flaggedIds);
-      logger.info('summary.completed', { status: result.status, articleCount: articles.length, durationMs: elapsedMs(startedAt) });
+      logger.info('summary.completed', { triggeredAt, status: result.status, articleCount: articles.length, durationMs: elapsedMs(startedAt) });
     } catch (err) {
-      logger.error('summary.failed', errorDetails(err));
+      logger.error('summary.failed', { triggeredAt, ...errorDetails(err) });
     }
-  }, {
+  }), {
     timezone: 'Asia/Shanghai'
   });
 
@@ -117,16 +119,17 @@ export function startCleanupScheduler() {
     logger.warn('cleanup.invalid_retention', { retentionDays });
   }
 
-  cleanupTask = cron.schedule('0 0 * * *', () => {
+  cleanupTask = cron.schedule('0 0 * * *', () => withLogTrigger(() => {
+    const triggeredAt = getTriggeredAt();
     try {
       const startedAt = performance.now();
       const beforeDate = getCleanupCutoffDate();
       const deleted = cleanupOldArticles(beforeDate);
-      logger.info('cleanup.completed', { beforeDate, deleted, durationMs: elapsedMs(startedAt) });
+      logger.info('cleanup.completed', { triggeredAt, beforeDate, deleted, durationMs: elapsedMs(startedAt) });
     } catch (err) {
-      logger.error('cleanup.failed', errorDetails(err));
+      logger.error('cleanup.failed', { triggeredAt, ...errorDetails(err) });
     }
-  }, {
+  }), {
     timezone: 'Asia/Shanghai'
   });
 
@@ -145,12 +148,15 @@ let xinwenlianboTask = null;
 let audioCleanupTask = null;
 
 function clearExpiredAudio() {
-  try {
-    const cleared = cleanupExpiredXinwenlianboAudio();
-    logger[cleared ? 'info' : 'debug']('broadcast_audio_cleanup.completed', { cleared });
-  } catch (err) {
-    logger.error('broadcast_audio_cleanup.failed', errorDetails(err));
-  }
+  return withLogTrigger(() => {
+    const triggeredAt = getTriggeredAt();
+    try {
+      const cleared = cleanupExpiredXinwenlianboAudio();
+      logger[cleared ? 'info' : 'debug']('broadcast_audio_cleanup.completed', { triggeredAt, cleared });
+    } catch (err) {
+      logger.error('broadcast_audio_cleanup.failed', { triggeredAt, ...errorDetails(err) });
+    }
+  });
 }
 
 export function startXinwenlianboScheduler() {
@@ -170,15 +176,16 @@ export function startXinwenlianboScheduler() {
     return;
   }
 
-  xinwenlianboTask = cron.schedule(cronExpression, async () => {
+  xinwenlianboTask = cron.schedule(cronExpression, () => withLogTrigger(async () => {
+    const triggeredAt = getTriggeredAt();
     try {
       const today = getXinwenlianboDate();
-      logger.info('broadcast.started', { date: today });
+      logger.info('broadcast.started', { triggeredAt, date: today });
       await runXinwenlianboTask(today);
     } catch (err) {
-      logger.error('broadcast.failed', errorDetails(err));
+      logger.error('broadcast.failed', { triggeredAt, ...errorDetails(err) });
     }
-  }, {
+  }), {
     timezone: 'Asia/Shanghai'
   });
 

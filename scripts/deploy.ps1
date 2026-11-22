@@ -4,6 +4,7 @@
 param([switch]$Reinstall)
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "log.ps1")
 $rootDir = Split-Path -Parent $PSScriptRoot
 $dependencyScript = Join-Path $PSScriptRoot "ensure-npm-deps.js"
 $dependencyFlags = @()
@@ -11,22 +12,22 @@ if ($Reinstall) { $dependencyFlags += "--reinstall" }
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "`n[$Message]" -ForegroundColor Cyan
+    Write-Log "`n[$Message]" -ForegroundColor Cyan
 }
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Green
+    Write-Log "  $Message" -ForegroundColor Green
 }
 
 function Write-Error {
     param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Red
+    Write-Log "  $Message" -ForegroundColor Red
 }
 
-Write-Host "============================================" -ForegroundColor Green
-Write-Host "  AI News Broadcasting - Deploy" -ForegroundColor Green
-Write-Host "============================================" -ForegroundColor Green
+Write-Log "============================================" -ForegroundColor Green
+Write-Log "  AI News Broadcasting - Deploy" -ForegroundColor Green
+Write-Log "============================================" -ForegroundColor Green
 
 # Step 1: Build frontend
 Write-Step "1/4 Building frontend..."
@@ -66,9 +67,9 @@ Write-Success "Build output verified"
 # Step 4: Start server
 Write-Step "4/4 Starting server..."
 $env:NODE_ENV = "production"
-Write-Host "`nServer starting on http://0.0.0.0:3000" -ForegroundColor Yellow
-Write-Host "Access via: http://<your-ip>:3000" -ForegroundColor Yellow
-Write-Host "Press Ctrl+C to stop`n" -ForegroundColor Gray
+Write-Log "`nServer starting on http://0.0.0.0:3000" -ForegroundColor Yellow
+Write-Log "Access via: http://<your-ip>:3000" -ForegroundColor Yellow
+Write-Log "Press Ctrl+C to stop`n" -ForegroundColor Gray
 
 Set-Location "$rootDir\backend"
 node src/server.js

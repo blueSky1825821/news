@@ -33,13 +33,14 @@ export default function SourceManager() {
   };
 
   const fetchThreshold = async () => {
+    const triggeredAt = new Date().toISOString();
     try {
       const data = await api.getFailureThreshold();
       if (data?.threshold) {
         setThreshold(data.threshold);
       }
     } catch (err) {
-      console.error('加载阈值失败:', err);
+      console.error(`[triggeredAt=${triggeredAt}]`, '加载阈值失败:', err);
     }
   };
 

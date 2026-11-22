@@ -2,6 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/log.sh"
 PID_FILE="$SCRIPT_DIR/server.pid"
 
 BACKEND_DIR="$(cd "$SCRIPT_DIR/../backend" && pwd -P)"
@@ -20,7 +21,7 @@ fi
 
 PID=$(cat "$PID_FILE")
 if is_server; then
-    echo "Stopping server (PID: $PID)..."
+    log_message "Stopping server (PID: $PID)..."
     if ! kill -TERM "$PID" && is_server; then
         exit 1
     fi
@@ -30,11 +31,11 @@ if is_server; then
         sleep 0.2
     done
     if is_server; then
-        echo "Server (PID: $PID) did not stop within 12 seconds." >&2
+        log_message "Server (PID: $PID) did not stop within 12 seconds." >&2
         exit 1
     fi
-    echo "Server stopped."
+    log_message "Server stopped."
 else
-    echo "No matching server process for the recorded PID."
+    log_message "No matching server process for the recorded PID."
 fi
 rm -f "$PID_FILE"

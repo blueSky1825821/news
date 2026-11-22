@@ -1,4 +1,19 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 const levels = { debug: 10, info: 20, warn: 30, error: 40, silent: Infinity };
+const logContext = new AsyncLocalStorage();
+
+export function getTriggeredAt() {
+  return logContext.getStore() ?? new Date().toISOString();
+}
+
+export function withLogTrigger(callback, triggeredAt = new Date().toISOString()) {
+  return logContext.run(triggeredAt, callback);
+}
+
+export function logConsole(level, ...args) {
+  console[level](`[triggeredAt=${getTriggeredAt()}]`, ...args);
+}
 
 export function createLogger(component) {
   function write(level, event, fields) {
@@ -6,7 +21,9 @@ export function createLogger(component) {
     const minimum = Object.hasOwn(levels, configured) ? levels[configured] : levels.info;
     if (levels[level] < minimum) return;
 
-    const entry = JSON.stringify({ time: new Date().toISOString(), level, component, event, ...fields });
+    const time = new Date().toISOString();
+    const triggeredAt = fields?.triggeredAt ?? logContext.getStore() ?? time;
+    const entry = JSON.stringify({ time, level, component, event, ...fields, triggeredAt });
     console[level === 'debug' ? 'log' : level](entry);
   }
 

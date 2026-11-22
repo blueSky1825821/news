@@ -4,6 +4,7 @@
  * Usage: node scripts/run.js <deploy|dev> [options]
  */
 
+import { logConsole } from '../backend/src/utils/logger.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -13,16 +14,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const [, , command, ...args] = process.argv;
 
 if (!command || (command !== 'deploy' && command !== 'dev')) {
-  console.error('Usage: node scripts/run.js <deploy|dev>');
+  logConsole('error', 'Usage: node scripts/run.js <deploy|dev>');
   process.exit(1);
 }
 
 if (command === 'deploy' && args.some(arg => arg === '--help' || arg === '-h')) {
-  console.log('Usage: npm run deploy -- [--reinstall | --reinstall-npm]');
+  logConsole('log', 'Usage: npm run deploy -- [--reinstall | --reinstall-npm]');
   process.exit(0);
 }
 if (command === 'deploy' && args.some(arg => !['--reinstall', '--reinstall-npm'].includes(arg))) {
-  console.error('Unknown deployment option. Run npm run deploy -- --help for usage.');
+  logConsole('error', 'Unknown deployment option. Run npm run deploy -- --help for usage.');
   process.exit(1);
 }
 
@@ -31,8 +32,8 @@ const scriptPrefix = command === 'dev' ? 'start-dev' : command;
 const scriptName = isWindows ? `${scriptPrefix}.ps1` : `${scriptPrefix}.sh`;
 const scriptPath = path.join(__dirname, scriptName);
 
-console.log(`Platform: ${os.platform()}`);
-console.log(`Running: ${scriptPath}`);
+logConsole('log', `Platform: ${os.platform()}`);
+logConsole('log', `Running: ${scriptPath}`);
 
 let child;
 if (isWindows) {
@@ -47,7 +48,7 @@ if (isWindows) {
 }
 
 child.on('error', error => {
-  console.error(error.message);
+  logConsole('error', error.message);
   process.exitCode = 1;
 });
 child.on('exit', code => {

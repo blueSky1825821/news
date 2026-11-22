@@ -2,21 +2,22 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/log.sh"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 reinstall=false
 case "${1:-}" in
     --reinstall) reinstall=true ;;
-    -h|--help) echo "Usage: bash scripts/install-xinwenlianbo-deps.sh [--reinstall]"; exit 0 ;;
+    -h|--help) log_message "Usage: bash scripts/install-xinwenlianbo-deps.sh [--reinstall]"; exit 0 ;;
     '') ;;
-    *) printf 'Unknown installer option: %s\n' "$1" >&2; exit 1 ;;
+    *) log_format 'Unknown installer option: %s' "$1" >&2; exit 1 ;;
 esac
 
 INSTALL_DIR="$(node -p 'require("node:path").resolve(process.argv[1])' "${INSTALL_DIR:-/opt}")"
 WHISPER_DIR="$INSTALL_DIR/whisper.cpp"
 MODEL_NAME="${WHISPER_MODEL:-large-v3-turbo-q5_0}"
 if [[ ! "$MODEL_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo 'Invalid WHISPER_MODEL name.' >&2
+    log_message 'Invalid WHISPER_MODEL name.' >&2
     exit 1
 fi
 MANAGED_WHISPER="$WHISPER_DIR/build/bin/whisper-cli"
@@ -55,9 +56,9 @@ if (( EUID != 0 )); then
     privileged=(sudo)
 fi
 
-printf '\n  Checking FFmpeg...\n'
+log_message '  Checking FFmpeg...'
 if ! $reinstall && command -v ffmpeg >/dev/null; then
-    echo "  Reusing FFmpeg: $(command -v ffmpeg)"
+    log_message "  Reusing FFmpeg: $(command -v ffmpeg)"
 elif command -v apt-get >/dev/null; then
     "${privileged[@]}" apt-get update
     if $reinstall; then
@@ -78,23 +79,23 @@ elif command -v apk >/dev/null; then
         "${privileged[@]}" apk add ffmpeg
     fi
 else
-    echo '  Unsupported package manager. Install FFmpeg manually.' >&2
+    log_message '  Unsupported package manager. Install FFmpeg manually.' >&2
     exit 1
 fi
 
-printf '\n  Checking Whisper and model...\n'
+log_message '  Checking Whisper and model...'
 needs_build=false
 needs_model=false
 if $reinstall || ! command -v "$WHISPER_BIN" >/dev/null; then
     if ! $reinstall && [[ "$WHISPER_BIN" != "$MANAGED_WHISPER" ]]; then
-        printf '  Configured WHISPER_EXECUTABLE is unavailable: %s\n' "$WHISPER_BIN" >&2
+        log_format 'Configured WHISPER_EXECUTABLE is unavailable: %s' "$WHISPER_BIN" >&2
         exit 1
     fi
     needs_build=true
 fi
 if $reinstall || [[ ! -f "$MODEL_FILE" || ! -s "$MODEL_FILE" ]]; then
     if ! $reinstall && [[ "$MODEL_FILE" != "$MANAGED_MODEL" ]]; then
-        printf '  Configured WHISPER_MODEL_PATH is unavailable: %s\n' "$MODEL_FILE" >&2
+        log_format 'Configured WHISPER_MODEL_PATH is unavailable: %s' "$MODEL_FILE" >&2
         exit 1
     fi
     needs_model=true
@@ -131,11 +132,11 @@ if $needs_build || $needs_model; then
         stage_dir="$("${install_command[@]}" mktemp -d "$WHISPER_DIR/models/.download.XXXXXX")"
         staged_model="$stage_dir/ggml-$MODEL_NAME.bin"
         trap '"${install_command[@]}" rm -f -- "$staged_model"; "${install_command[@]}" rmdir -- "$stage_dir"' EXIT
-        printf '  Downloading Whisper model %s from %s\n' "$MODEL_NAME" "$model_url"
+        log_format 'Downloading Whisper model %s from %s' "$MODEL_NAME" "$model_url"
         if ! "${install_command[@]}" curl --fail --location --connect-timeout 15 \
             --speed-limit 1024 --speed-time 30 --retry 2 --retry-delay 2 \
             --output "$staged_model" "$model_url"; then
-            echo '  Whisper model download failed. Set HF_ENDPOINT to a reachable mirror or WHISPER_MODEL_PATH to a local model.' >&2
+            log_message '  Whisper model download failed. Set HF_ENDPOINT to a reachable mirror or WHISPER_MODEL_PATH to a local model.' >&2
             exit 1
         fi
         [[ -s "$staged_model" ]]
@@ -147,17 +148,18 @@ if $needs_build || $needs_model; then
         if [[ -n "$expected_sha256" ]]; then
             if ! printf '%s  %s\n' "$expected_sha256" "$staged_model" |
                 "${install_command[@]}" sha256sum --check --status; then
-                echo '  Whisper model checksum verification failed.' >&2
+                log_message '  Whisper model checksum verification failed.' >&2
                 exit 1
             fi
         fi
         "${install_command[@]}" mv -f -- "$staged_model" "$MANAGED_MODEL"
     fi
 else
-    printf '  Reusing Whisper: %s\n  Reusing model: %s\n' "$WHISPER_BIN" "$MODEL_FILE"
+    log_message "  Reusing Whisper: $WHISPER_BIN"
+    log_message "  Reusing model: $MODEL_FILE"
 fi
 
 if $needs_build || $needs_model; then
-    printf '\n  Managed paths for backend/.env:\n'
+    log_message '  Managed paths for backend/.env:'
     printf '  WHISPER_EXECUTABLE=%s\n  WHISPER_MODEL_PATH=%s\n' "$MANAGED_WHISPER" "$MANAGED_MODEL"
 fi

@@ -2,7 +2,7 @@ import { getActiveSources, getSourceById } from '../models/source.js';
 import { crawlAllSources, crawlSource, classifyError } from './crawler.js';
 import { getHealth, recordSuccess, recordFailure, recordCooldown, deactivateSource } from '../models/sourceHealth.js';
 import { getFailureThreshold } from '../models/settings.js';
-import { createLogger, elapsedMs, errorDetails } from '../utils/logger.js';
+import { createLogger, elapsedMs, errorDetails, getTriggeredAt, withLogTrigger } from '../utils/logger.js';
 
 const logger = createLogger('crawl');
 
@@ -13,15 +13,16 @@ export async function triggerManualCrawl() {
 let activeBatch = null;
 const activeSources = new Map();
 
-export function crawlActiveRssSources(trigger) {
+export function crawlActiveRssSources(trigger, triggeredAt = getTriggeredAt()) {
   if (!activeBatch) {
     const sources = getActiveSources().filter((source) => source.type === 'rss');
     const startedAt = performance.now();
-    logger.info('batch.started', { trigger, sourceCount: sources.length });
-    activeBatch = crawlAllSources(sources, crawlSourceOnce).then(results => {
+    logger.info('batch.started', { trigger, triggeredAt, sourceCount: sources.length });
+    activeBatch = withLogTrigger(() => crawlAllSources(sources, crawlSourceOnce), triggeredAt).then(results => {
       const failed = results.filter(result => result.errorType).length;
       logger.info('batch.completed', {
         trigger,
+        triggeredAt,
         sourceCount: sources.length,
         failed,
         inserted: results.reduce((total, result) => total + result.count, 0),
@@ -30,7 +31,7 @@ export function crawlActiveRssSources(trigger) {
       return results;
     }).finally(() => { activeBatch = null; });
   } else {
-    logger.debug('batch.joined', { trigger });
+    logger.debug('batch.joined', { trigger, triggeredAt });
   }
   return activeBatch;
 }
@@ -47,6 +48,7 @@ function crawlSourceOnce(source) {
 }
 
 export async function triggerManualCrawlForSource(sourceId) {
+  const triggeredAt = getTriggeredAt();
   const source = getSourceById(sourceId);
   if (!source) {
     throw new Error('Source not found');
@@ -57,13 +59,13 @@ export async function triggerManualCrawlForSource(sourceId) {
   if (source.type !== 'rss') {
     throw new Error('Source is not an RSS feed');
   }
-  logger.info('feed.manual_started', { sourceId });
+  logger.info('feed.manual_started', { sourceId, triggeredAt });
   try {
-    const articles = await crawlSourceOnce(source);
+    const articles = await withLogTrigger(() => crawlSourceOnce(source), triggeredAt);
     return { source: source.name, count: articles.length, articles };
   } catch (err) {
     const { type } = classifyError(err);
-    logger.warn('feed.manual_failed', { sourceId, errorType: type, ...errorDetails(err) });
+    logger.warn('feed.manual_failed', { sourceId, triggeredAt, errorType: type, ...errorDetails(err) });
     throw err;
   }
 }

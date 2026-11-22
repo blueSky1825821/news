@@ -3,21 +3,22 @@
 # Starts both backend and frontend dev servers
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "log.ps1")
 $rootDir = Split-Path -Parent $PSScriptRoot
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "`n[$Message]" -ForegroundColor Cyan
+    Write-Log "`n[$Message]" -ForegroundColor Cyan
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Green
+    Write-Log "  $Message" -ForegroundColor Green
 }
 
-Write-Host "============================================" -ForegroundColor Green
-Write-Host "  AI News Broadcasting - Dev Mode" -ForegroundColor Green
-Write-Host "============================================" -ForegroundColor Green
+Write-Log "============================================" -ForegroundColor Green
+Write-Log "  AI News Broadcasting - Dev Mode" -ForegroundColor Green
+Write-Log "============================================" -ForegroundColor Green
 
 # Step 1: Install dependencies
 Write-Step "1/3 Installing dependencies..."
@@ -42,10 +43,10 @@ Write-Step "3/3 Starting frontend dev server..."
 $frontendJob = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "Set-Location '$rootDir\frontend'; npm run dev" -PassThru
 Write-Info "Frontend starting on http://localhost:3000/news/ (PID: $($frontendJob.Id))"
 
-Write-Host "`n============================================" -ForegroundColor Green
-Write-Host "  Both services are starting..." -ForegroundColor Green
-Write-Host "  Frontend: http://0.0.0.0:3000/news/" -ForegroundColor Yellow
-Write-Host "  Backend:  http://0.0.0.0:3001" -ForegroundColor Yellow
-Write-Host "  Access via: http://<your-ip>:3000/news/" -ForegroundColor Yellow
-Write-Host "============================================" -ForegroundColor Green
-Write-Host "`nClose the PowerShell windows to stop services." -ForegroundColor Gray
+Write-Log "`n============================================" -ForegroundColor Green
+Write-Log "  Both services are starting..." -ForegroundColor Green
+Write-Log "  Frontend: http://0.0.0.0:3000/news/" -ForegroundColor Yellow
+Write-Log "  Backend:  http://0.0.0.0:3001" -ForegroundColor Yellow
+Write-Log "  Access via: http://<your-ip>:3000/news/" -ForegroundColor Yellow
+Write-Log "============================================" -ForegroundColor Green
+Write-Log "`nClose the PowerShell windows to stop services." -ForegroundColor Gray

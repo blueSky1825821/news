@@ -1,3 +1,4 @@
+import { logConsole } from '../utils/logger.js';
 import { withWriteTransaction } from '../db.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
@@ -75,7 +76,7 @@ router.post('/register', async (req, res, next) => {
       const verificationToken = createVerificationToken(userId);
       await sendVerificationEmail(user.email, verificationToken);
     } catch (emailErr) {
-      console.error('Failed to send verification email:', emailErr.message);
+      logConsole('error', 'Failed to send verification email:', emailErr.message);
     }
 
     const token = generateToken({ userId: user.id, email: user.email });
@@ -231,7 +232,7 @@ router.post('/resend-verification', authMiddleware, async (req, res, next) => {
       await sendVerificationEmail(user.email, token);
     } catch (emailErr) {
       deleteVerificationToken(token);
-      console.error('Failed to resend verification email:', emailErr.code || 'SMTP_ERROR');
+      logConsole('error', 'Failed to resend verification email:', emailErr.code || 'SMTP_ERROR');
       throw Object.assign(new Error('验证邮件发送失败，请稍后重试'), { statusCode: 503 });
     }
     res.sendJson(0, 'Verification email sent');
@@ -249,7 +250,7 @@ router.post('/forgot-password', async (req, res, next) => {
         try {
           await sendPasswordResetEmail(user.email, token);
         } catch (emailErr) {
-          console.error('Failed to send password reset email:', emailErr.message);
+          logConsole('error', 'Failed to send password reset email:', emailErr.message);
         }
       }
     }
