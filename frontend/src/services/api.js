@@ -1,4 +1,5 @@
 ﻿const BASE_URL = '/news';
+const pendingFlaggedArticles = new Map();
 
 async function request(url, options = {}) {
   const token = localStorage.getItem('news-auth-token');
@@ -158,15 +159,27 @@ export const api = {
     });
   },
 
-  toggleFlagArticle(articleId) {
-    return request('/api/wechat/flag', {
+  async toggleFlagArticle(articleId) {
+    const token = localStorage.getItem('news-auth-token');
+    const result = await request('/api/wechat/flag', {
       method: 'POST',
       body: JSON.stringify({ articleId })
     });
+    pendingFlaggedArticles.delete(token);
+    return result;
   },
 
   getFlaggedArticleIds() {
-    return request('/api/wechat/flags');
+    const token = localStorage.getItem('news-auth-token');
+    let pending = pendingFlaggedArticles.get(token);
+    if (!pending) {
+      pending = request('/api/wechat/flags')
+        .finally(() => {
+          if (pendingFlaggedArticles.get(token) === pending) pendingFlaggedArticles.delete(token);
+        });
+      pendingFlaggedArticles.set(token, pending);
+    }
+    return pending;
   },
 
   getPreviewContent() {

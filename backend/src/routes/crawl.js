@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { triggerManualCrawl, triggerManualCrawlForSource, getCleanupCutoffDate } from '../services/scheduler.js';
+import { triggerManualCrawl, triggerManualCrawlForSource } from '../services/crawlService.js';
+import { getCleanupCutoffDate } from '../services/scheduler.js';
 import { cleanupOldArticles } from '../models/article.js';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 

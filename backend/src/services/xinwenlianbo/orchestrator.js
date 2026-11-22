@@ -9,6 +9,7 @@ import { startLiveTranscription } from './liveTranscription.js';
 import { summarize } from './summarizer.js';
 import { extractOpeningHeadlines, normalizeHeadlines } from './headlines.js';
 import { insertArticle } from '../../models/article.js';
+import { BYTES_PER_SECOND, WAV_HEADER_READ_BYTES, finalizedAudioSeconds, readWavHeader } from './wav.js';
 
 function getConfigValue(key, envName, defaultValue = null) {
   const envValue = process.env[envName];
@@ -28,12 +29,12 @@ export function getXinwenlianboConfig() {
     llmApiUrl: getConfigValue('llmApiUrl', 'LLM_API_URL'),
     llmApiKey: getConfigValue('llmApiKey', 'LLM_API_KEY'),
     llmModel: getConfigValue('llmModel', 'LLM_MODEL', 'deepseek-chat'),
+    livePreview: getConfigValue('livePreview', 'XINWENLIANBO_LIVE_PREVIEW', 'true') === 'true',
     keepAudio: getConfigValue('keepAudio', 'XINWENLIANBO_KEEP_AUDIO', 'true') === 'true'
   };
 }
 
 const RUNNING = new Set(['recording', 'finishing', 'stopping', 'transcribing', 'summarizing']);
-const AUDIO_BYTES_PER_SECOND = 32_000;
 const AUDIO_RETENTION_DAYS = 15;
 let activeTask = null;
 
@@ -84,10 +85,19 @@ function logCurrentFailure(date, err) {
   logStepFailure(date, progress?.step ?? 'setup', err, progress?.elapsedSeconds);
 }
 
-function capturedAudioSeconds(audioPath) {
-  if (!audioPath) return null;
-  const bytes = fs.statSync(audioPath, { throwIfNoEntry: false })?.size ?? 0;
-  return Math.floor(Math.max(0, bytes - 44) / AUDIO_BYTES_PER_SECOND);
+function readRecordingHeader(file) {
+  const header = Buffer.alloc(WAV_HEADER_READ_BYTES);
+  const bytesRead = fs.readSync(file, header, 0, header.length, 0);
+  return readWavHeader(header.subarray(0, bytesRead));
+}
+
+function validateRecording(audioPath) {
+  const file = fs.openSync(audioPath, 'r');
+  try {
+    return finalizedAudioSeconds(readRecordingHeader(file), fs.fstatSync(file).size);
+  } finally {
+    fs.closeSync(file);
+  }
 }
 
 export function getXinwenlianboDate() {
@@ -101,7 +111,7 @@ function taskError(message, statusCode, code = statusCode) {
 export function getXinwenlianboStatus() {
   const date = activeTask?.date ?? getXinwenlianboDate();
   const db = getDb();
-  const task = db.prepare('SELECT * FROM xinwenlianbo_tasks WHERE taskDate = ?').get(date);
+  const task = db.prepare('SELECT status, startedAt, completedAt, errorMessage FROM xinwenlianbo_tasks WHERE taskDate = ?').get(date);
   const interrupted = !activeTask && RUNNING.has(task?.status);
   const article = task && !RUNNING.has(task.status) && db.prepare(`
     SELECT a.id FROM articles a JOIN sources s ON s.id = a.sourceId
@@ -123,9 +133,21 @@ export function getXinwenlianboStatus() {
 }
 
 function statusAudioSeconds(task) {
-  if (task?.status !== 'recording') return null;
+  if (task?.status !== 'recording' || !activeTask?.audioPath) return null;
   try {
-    return capturedAudioSeconds(activeTask?.audioPath);
+    const { audioPath } = activeTask;
+    if (!activeTask.dataOffset) {
+      if (!fs.statSync(audioPath, { throwIfNoEntry: false })?.size) return 0;
+      const file = fs.openSync(audioPath, 'r');
+      try {
+        activeTask.dataOffset = readRecordingHeader(file)?.dataOffset;
+      } finally {
+        fs.closeSync(file);
+      }
+    }
+    if (!activeTask.dataOffset) return 0;
+    const bytes = fs.statSync(audioPath).size - activeTask.dataOffset;
+    return Math.floor(Math.max(0, bytes) / BYTES_PER_SECOND);
   } catch {
     // Progress reporting must not interrupt recording.
     return null;
@@ -263,18 +285,19 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
   const stopProgressLogging = startProgressLogging();
   let retained = false;
   let liveTranscription;
-  let capturedSeconds;
   try {
     beginStep('recording', { scheduled, durationMinutes: duration });
     const db = getDb();
     const recording = startRecording(config.audioUrl, duration * 60, audioPath);
-    liveTranscription = startLiveTranscription(audioPath, config, (seconds, transcript) => {
-      activeTask.transcribedSeconds = seconds;
-      activeTask.transcriptPreview = transcript.slice(-2000);
-    });
+    if (config.livePreview) {
+      liveTranscription = startLiveTranscription(audioPath, config, (seconds, transcript) => {
+        activeTask.transcribedSeconds = seconds;
+        activeTask.transcriptPreview = transcript.slice(-2000);
+      });
+    }
     await recording;
     beginStep('recording-validation');
-    capturedSeconds = capturedAudioSeconds(audioPath);
+    const capturedSeconds = validateRecording(audioPath);
     if (capturedSeconds < 1) {
       throw new Error('未录到有效音频，请检查直播流并至少录制 1 秒');
     }
@@ -296,8 +319,9 @@ async function processRecording({ date, config, duration, scheduled, audioPath, 
     }
     beginStep('transcribing');
     db.prepare("UPDATE xinwenlianbo_tasks SET status = 'transcribing' WHERE taskDate = ?").run(date);
-    const preview = await liveTranscription.cancel();
-    if (preview.error && preview.error.name !== 'AbortError') {
+    const preview = await liveTranscription?.cancel();
+    liveTranscription = undefined;
+    if (preview?.error && preview.error.name !== 'AbortError') {
       logStepFailure(date, 'live-transcription', preview.error);
     }
     activeTask.transcribedSeconds = null;
@@ -579,7 +603,7 @@ export function cleanupExpiredXinwenlianboAudio(now = new Date()) {
   const clearAudio = db.prepare('UPDATE xinwenlianbo_tasks SET audioFilePath = NULL WHERE id = ? AND audioFilePath = ?');
   let cleared = 0;
   for (const { id, taskDate, audioFilePath, archived } of expired) {
-    if (!archived && activeTask?.date === taskDate) continue;
+    if (activeTask?.audioPath === audioFilePath) continue;
     try {
       removeRecordingAudio(audioFilePath, taskDate);
       cleared += (archived ? deleteAudio.run(id) : clearAudio.run(id, audioFilePath)).changes;

@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { appendFile, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createWavHeader, finalizedAudioSeconds, readWavHeader } from '../src/services/xinwenlianbo/wav.js';
 
 const transcribe = jest.fn();
 jest.unstable_mockModule('../src/services/xinwenlianbo/transcriber.js', () => ({ transcribe }));
@@ -15,13 +16,26 @@ test('merges matching speech with different punctuation and rejects uncertain jo
   expect(() => mergeTranscript('接下来报道今天上午', '代表团抵达北京')).toThrow('无法可靠衔接');
 });
 
+test('counts only finalized PCM data when a WAV contains metadata before and after it', () => {
+  const dataBytes = 32_000 - 2;
+  const base = createWavHeader(dataBytes);
+  const metadata = Buffer.alloc(14);
+  metadata.write('LIST');
+  metadata.writeUInt32LE(5, 4);
+  const header = Buffer.concat([base.subarray(0, 36), metadata, base.subarray(36)]);
+  const fileBytes = header.length + dataBytes + metadata.length;
+  header.writeUInt32LE(fileBytes - 8, 4);
+  const wav = readWavHeader(header);
+  expect(wav.dataOffset).toBe(58);
+  expect(finalizedAudioSeconds(wav, fileBytes)).toBeLessThan(1);
+  expect(() => finalizedAudioSeconds(wav, fileBytes - 2)).toThrow('音频数据不完整');
+});
+
 test('transcribes a full window before recording ends and includes overlapping audio in the next window', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'xwlb-live-test-'));
   const audioPath = path.join(directory, 'recording.wav');
   const header = Buffer.alloc(58);
-  header.write('RIFF');
-  header.write('WAVEfmt ', 8);
-  header.writeUInt32LE(16, 16);
+  createWavHeader(0).copy(header, 0, 0, 36);
   header.write('LIST', 36);
   header.writeUInt32LE(5, 40);
   header.write('data', 50);

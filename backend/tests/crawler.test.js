@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import { getDb, closeDb } from '../src/db.js';
 import { insertSource, getAllSources } from '../src/models/source.js';
-import { listArticles } from '../src/models/article.js';
+import { insertArticles, listArticles } from '../src/models/article.js';
 import { getHealth } from '../src/models/sourceHealth.js';
 import { crawlSource, crawlAllSources, normalizeArticle } from '../src/services/crawler.js';
 import { triggerManualCrawl, triggerManualCrawlForSource } from '../src/services/scheduler.js';
@@ -54,6 +54,18 @@ describe('Crawler', () => {
     expect(await crawlSource(source)).toHaveLength(2);
     expect(listArticles().items).toHaveLength(2);
     expect(await crawlSource(source)).toEqual([]);
+  });
+
+  it('rolls back the whole batch if a later insert fails', () => {
+    const sourceId = addSource();
+    const article = { sourceId, title: 'Valid article', originalUrl: 'https://example.org/valid' };
+
+    expect(() => insertArticles([
+      article,
+      { ...article, sourceId: -1, originalUrl: 'https://example.org/invalid' }
+    ])).toThrow(/FOREIGN KEY/);
+    expect(listArticles().items).toEqual([]);
+    expect(insertArticles([article])).toHaveLength(1);
   });
 
   it('isolates a 404 and leaves it unretried', async () => {

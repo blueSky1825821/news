@@ -4,8 +4,14 @@ import { dirname, join } from 'node:path';
 import { jest } from '@jest/globals';
 import { closeDb, getDb } from '../src/db.js';
 import { setSetting } from '../src/models/settings.js';
+import { createWavHeader } from '../src/services/xinwenlianbo/wav.js';
 
-const record = jest.fn(async (_url, _duration, output) => writeFileSync(output, Buffer.alloc(64_000)));
+function recordingWav(seconds) {
+  const data = Buffer.alloc(seconds * 32_000);
+  return Buffer.concat([createWavHeader(data.length), data]);
+}
+
+const record = jest.fn(async (_url, _duration, output) => writeFileSync(output, recordingWav(2)));
 const transcribe = jest.fn(async () => '测试转录');
 const summarize = jest.fn();
 jest.unstable_mockModule('../src/services/xinwenlianbo/recorder.js', () => ({
@@ -42,12 +48,7 @@ describe('Xinwenlianbo recording task', () => {
   it('publishes the full recording transcript after cancelling an in-flight preview', async () => {
     let finishRecording;
     record.mockImplementationOnce(async (_url, _duration, output) => {
-      const wav = Buffer.alloc(44 + 114 * 32_000);
-      wav.write('RIFF');
-      wav.write('WAVEfmt ', 8);
-      wav.writeUInt32LE(16, 16);
-      wav.write('data', 36);
-      writeFileSync(output, wav);
+      writeFileSync(output, recordingWav(114));
       await new Promise(resolve => { finishRecording = resolve; });
     });
     let previewStopped = false;
@@ -80,6 +81,35 @@ describe('Xinwenlianbo recording task', () => {
     expect(transcribe).toHaveBeenCalledTimes(3);
     expect(listXinwenlianboRecords(1, 10).items.map(({ id }) => getXinwenlianboRecord(id).transcript))
       .toEqual(['整段识别结果']);
+  });
+
+  it('rejects a truncated WAV even if its file size is enough for transcription', async () => {
+    record.mockImplementationOnce(async (_url, _duration, output) => {
+      writeFileSync(output, recordingWav(2).subarray(0, -2));
+    });
+
+    await expect(startXinwenlianboTask(getXinwenlianboDate()).completion).rejects.toThrow('音频数据不完整');
+    expect(getXinwenlianboStatus().status).toBe('failed');
+    expect(transcribe).not.toHaveBeenCalled();
+    expect(getDb().prepare('SELECT id FROM articles').all()).toEqual([]);
+  });
+
+  it('uses only the final transcription when live preview is disabled', async () => {
+    setSetting('xwlb_livePreview', 'false');
+    let finishRecording;
+    record.mockImplementationOnce(async (_url, _duration, output) => {
+      writeFileSync(output, recordingWav(60));
+      await new Promise(resolve => { finishRecording = resolve; });
+    });
+    const task = startXinwenlianboTask(getXinwenlianboDate());
+    expect(task.status.capturedSeconds).toBe(60);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(transcribe).not.toHaveBeenCalled();
+
+    finishRecording();
+    await expect(task.completion).resolves.toMatchObject({ status: 'completed' });
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(transcribe.mock.calls[0][0]).toBe(record.mock.calls[0][2]);
   });
 
   it('claims the pipeline once, completes it, and updates the same article on a forced retry', async () => {

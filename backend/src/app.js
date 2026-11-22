@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { responseWrapper } from './middleware/responseWrapper.js';
+import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import articlesRouter from './routes/articles.js';
 import trendsRouter from './routes/trends.js';
@@ -22,39 +23,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const app = express();
 
-app.use(cors());
+app.use(['/api', '/news/api'], requestLogger);
+app.use(cors({ exposedHeaders: ['X-Request-ID'] }));
 app.use(express.json());
 app.use(responseWrapper);
 
-app.use('/api/articles', articlesRouter);
-app.use(['/api/trends', '/news/api/trends'], trendsRouter);
-app.use('/api/sources', sourcesRouter);
-app.use('/api/crawl', crawlRouter);
-app.use('/api/auth', authRouter);
-app.use('/api/categories', categoriesRouter);
-app.use('/api/settings', settingsRouter);
-app.use('/api/users/categories', userCategoriesRouter);
-app.use('/api/wechat', wechatRouter);
+const apiRoutes = [
+  ['/articles', articlesRouter],
+  ['/trends', trendsRouter],
+  ['/sources', sourcesRouter],
+  ['/crawl', crawlRouter],
+  ['/auth', authRouter],
+  ['/categories', categoriesRouter],
+  ['/settings', settingsRouter],
+  ['/users/categories', userCategoriesRouter],
+  ['/wechat', wechatRouter],
+  ['/xinwenlianbo', xinwenlianboRouter],
+  ['/users', usersRouter],
+  ['/articles/:id/likes', likesRouter],
+  ['', commentsRouter]
+];
 
-// Mirror API routes under /news for unified prefix access
-app.use('/news/api/articles', articlesRouter);
-app.use('/news/api/sources', sourcesRouter);
-app.use('/news/api/crawl', crawlRouter);
-app.use('/news/api/auth', authRouter);
-app.use('/news/api/categories', categoriesRouter);
-app.use('/news/api/settings', settingsRouter);
-app.use('/news/api/users/categories', userCategoriesRouter);
-app.use('/news/api/wechat', wechatRouter);
-app.use('/api/xinwenlianbo', xinwenlianboRouter);
-app.use('/news/api/xinwenlianbo', xinwenlianboRouter);
-
-app.use('/api/users', usersRouter);
-app.use('/news/api/users', usersRouter);
-
-app.use('/api/articles/:id/likes', likesRouter);
-app.use('/news/api/articles/:id/likes', likesRouter);
-app.use('/api', commentsRouter);
-app.use('/news/api', commentsRouter);
+for (const [route, router] of apiRoutes) {
+  app.use(['/api' + route, '/news/api' + route], router);
+}
 
 // Serve uploaded files
 const uploadsPath = path.join(__dirname, '../public/uploads');

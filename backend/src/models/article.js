@@ -11,14 +11,41 @@ function pagination(page, limit, total) {
   return { page, limit, total, totalPages: Math.ceil(total / limit) };
 }
 
-export function insertArticle({ title, summary, content, originalUrl, sourceId, publishedAt, transcript, headlines }) {
-  const db = getDb();
-  const stmt = db.prepare(`
+function prepareArticleInsert(db) {
+  return db.prepare(`
     INSERT OR IGNORE INTO articles (title, summary, content, originalUrl, sourceId, publishedAt, transcript, headlines)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
+}
+
+function runArticleInsert(stmt, { title, summary, content, originalUrl, sourceId, publishedAt, transcript, headlines }) {
   const result = stmt.run(title, summary || null, content || null, originalUrl, sourceId, publishedAt || null, transcript || null, headlines || null);
   return result.changes > 0 ? result.lastInsertRowid : null;
+}
+
+export function insertArticle(article) {
+  return runArticleInsert(prepareArticleInsert(getDb()), article);
+}
+
+export function insertArticles(articles) {
+  if (articles.length === 0) return [];
+
+  const db = getDb();
+  const stmt = prepareArticleInsert(db);
+  db.exec('SAVEPOINT rss_ingestion');
+  try {
+    const inserted = [];
+    for (const article of articles) {
+      const id = runArticleInsert(stmt, article);
+      if (id !== null) inserted.push({ ...article, id });
+    }
+    db.exec('RELEASE rss_ingestion');
+    return inserted;
+  } catch (err) {
+    db.exec('ROLLBACK TO rss_ingestion');
+    db.exec('RELEASE rss_ingestion');
+    throw err;
+  }
 }
 
 export function getArticleById(id, { includeLikes = false, viewerId = null } = {}) {

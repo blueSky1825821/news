@@ -3,40 +3,21 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { transcribe } from './transcriber.js';
 
-const BYTES_PER_SECOND = 32_000;
+import { BYTES_PER_SECOND, WAV_HEADER_READ_BYTES, createWavHeader, readWavHeader } from './wav.js';
 const WINDOW_SECONDS = 60;
 const OVERLAP_SECONDS = 6;
 
 async function audioDataOffset(file) {
-  const header = Buffer.alloc(4096);
+  const header = Buffer.alloc(WAV_HEADER_READ_BYTES);
   const { bytesRead } = await file.read(header, 0, header.length, 0);
-  if (bytesRead < 12) return null;
-  if (header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE') {
-    throw new Error('无法读取录音 WAV 文件头');
-  }
-  for (let offset = 12; offset + 8 <= bytesRead;) {
-    if (header.toString('ascii', offset, offset + 4) === 'data') return offset + 8;
-    const size = header.readUInt32LE(offset + 4);
-    offset += 8 + size + (size % 2);
-  }
-  return null;
+  return readWavHeader(header.subarray(0, bytesRead))?.dataOffset;
 }
 
 async function writeWindow(file, offset, length, outputPath) {
-  const wav = Buffer.alloc(44 + length);
-  wav.write('RIFF');
-  wav.writeUInt32LE(wav.length - 8, 4);
-  wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16);
-  wav.writeUInt16LE(1, 20);
-  wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(16_000, 24);
-  wav.writeUInt32LE(BYTES_PER_SECOND, 28);
-  wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34);
-  wav.write('data', 36);
-  wav.writeUInt32LE(length, 40);
-  const { bytesRead } = await file.read(wav, 44, length, offset);
+  const header = createWavHeader(length);
+  const wav = Buffer.allocUnsafe(header.length + length);
+  header.copy(wav);
+  const { bytesRead } = await file.read(wav, header.length, length, offset);
   if (bytesRead !== length) throw new Error('转录分段音频读取不完整');
   await fs.writeFile(outputPath, wav);
 }

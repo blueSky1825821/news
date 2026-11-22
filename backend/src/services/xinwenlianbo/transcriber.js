@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
+import fs from 'node:fs/promises';
 
 export async function transcribe(audioPath, whisperExecutable, modelPath, onProgress = () => {}, signal) {
   const outputPrefix = audioPath.replace(/\.wav$/, '');
@@ -48,7 +48,9 @@ export async function transcribe(audioPath, whisperExecutable, modelPath, onProg
 
   });
 
-  const transcript = fs.readFileSync(outputTxt, 'utf-8');
-  fs.unlinkSync(outputTxt);
-  return transcript;
+  try {
+    return await fs.readFile(outputTxt, 'utf-8');
+  } finally {
+    await fs.rm(outputTxt, { force: true });
+  }
 }

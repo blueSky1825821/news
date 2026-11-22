@@ -1,18 +1,17 @@
 import cron from 'node-cron';
-import { getActiveSources, getSourceById } from '../models/source.js';
-import { crawlAllSources, crawlSource, classifyError } from './crawler.js';
 import { getWechatSettings } from '../models/wechatSettings.js';
 import { listFlaggedArticleIds } from '../models/articleFlag.js';
 import { pushSummary } from './wechat.js';
 import { wechatCapabilities } from './wechatConfig.js';
-import { getHealth, recordSuccess, recordFailure, recordCooldown, deactivateSource } from '../models/sourceHealth.js';
-import { getFailureThreshold } from '../models/settings.js';
 import { getDb } from '../db.js';
-
-
+import { createLogger, elapsedMs, errorDetails } from '../utils/logger.js';
+import { crawlActiveRssSources } from './crawlService.js';
 import { cleanupOldArticles } from '../models/article.js';
 import { cleanupExpiredXinwenlianboAudio, getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
 
+export { triggerManualCrawl, triggerManualCrawlForSource } from './crawlService.js';
+
+const logger = createLogger('scheduler');
 const DEFAULT_RETENTION_DAYS = 90;
 
 export function resolveRetentionDays() {
@@ -35,92 +34,22 @@ export function startScheduler(cronExpression = '*/30 * * * *') {
   if (task) return;
   task = cron.schedule(cronExpression, async () => {
     try {
-      console.log('[Scheduler] Starting crawl...');
-      await crawlActiveRssSources();
-      console.log('[Scheduler] Crawl finished.');
+      await crawlActiveRssSources('scheduled');
     } catch (err) {
-      console.error('[Scheduler] Crawl task failed:', err.message);
+      logger.error('crawl.failed', errorDetails(err));
     }
   }, {
     timezone: 'Asia/Shanghai'
   });
-  console.log('[Scheduler] Started with cron:', cronExpression);
+  logger.info('crawl.scheduled', { cronExpression });
 }
 
 export function stopScheduler() {
   if (task) {
     task.stop();
     task = null;
-    console.log('[Scheduler] Stopped.');
+    logger.info('crawl.stopped');
   }
-}
-
-export async function triggerManualCrawl() {
-  console.log('[Scheduler] Manual crawl triggered.');
-  return crawlActiveRssSources();
-}
-
-let activeBatch = null;
-const activeSources = new Map();
-
-function crawlActiveRssSources() {
-  if (!activeBatch) {
-    const sources = getActiveSources().filter((source) => source.type === 'rss');
-    activeBatch = crawlAllSources(sources, crawlSourceOnce).finally(() => { activeBatch = null; });
-  }
-  return activeBatch;
-}
-
-function crawlSourceOnce(source) {
-  let pending = activeSources.get(source.id);
-  if (!pending) {
-    pending = crawlWithHealth(source).finally(() => activeSources.delete(source.id));
-    activeSources.set(source.id, pending);
-  }
-  return pending;
-}
-
-export async function triggerManualCrawlForSource(sourceId) {
-  const source = getSourceById(sourceId);
-  if (!source) {
-    throw new Error('Source not found');
-  }
-  if (!source.isActive) {
-    throw new Error('Source is inactive');
-  }
-  if (source.type !== 'rss') {
-    throw new Error('Source is not an RSS feed');
-  }
-  const articles = await crawlSourceOnce(source);
-  return { source: source.name, count: articles.length, articles };
-}
-
-async function crawlWithHealth(source) {
-  const { retryAfterAt } = getHealth(source.id);
-  if (retryAfterAt > Date.now()) {
-    const seconds = Math.ceil((retryAfterAt - Date.now()) / 1_000);
-    throw new Error(`RSS 来源要求暂停抓取，请在 ${seconds} 秒后重试`);
-  }
-
-  let articles;
-  try {
-    articles = await crawlSource(source);
-  } catch (err) {
-    const { type, message, cooldownMs } = classifyError(err);
-    // Storage errors are operational failures, not evidence that the source is down.
-    if (cooldownMs && getSourceById(source.id)) {
-      recordCooldown(source.id, message, Date.now() + cooldownMs);
-    } else if (type !== 'unknown' && getSourceById(source.id)) {
-      recordFailure(source.id, message);
-      const threshold = getFailureThreshold();
-      if (deactivateSource(source.id, threshold)) {
-        console.warn(`[Health] Source "${source.name}" deactivated after ${threshold} consecutive failures.`);
-      }
-    }
-    throw err;
-  }
-  if (getSourceById(source.id)) recordSuccess(source.id);
-  return articles;
 }
 
 let summaryTask = null;
@@ -132,14 +61,18 @@ export function startSummaryPushScheduler() {
 
   summaryTask = cron.schedule(cronExpression, async () => {
     try {
-      if (!wechatCapabilities().massSendEnabled) return;
+      const startedAt = performance.now();
+      if (!wechatCapabilities().massSendEnabled) {
+        logger.debug('summary.skipped', { reason: 'mass_send_unavailable' });
+        return;
+      }
       const settings = getWechatSettings();
       if (!settings || !settings.summaryPushEnabled) {
-        console.log('[WechatPush] Summary push disabled, skipping.');
+        logger.debug('summary.skipped', { reason: 'disabled' });
         return;
       }
       if (!settings.appId || !settings.appSecret) {
-        console.log('[WechatPush] WeChat not configured, skipping.');
+        logger.debug('summary.skipped', { reason: 'unconfigured' });
         return;
       }
 
@@ -151,22 +84,22 @@ export function startSummaryPushScheduler() {
 
       const flaggedIds = listFlaggedArticleIds();
       const result = await pushSummary(articles, flaggedIds);
-      console.log('[WechatPush] Summary push result:', result.status);
+      logger.info('summary.completed', { status: result.status, articleCount: articles.length, durationMs: elapsedMs(startedAt) });
     } catch (err) {
-      console.error('[WechatPush] Summary push failed:', err.message);
+      logger.error('summary.failed', errorDetails(err));
     }
   }, {
     timezone: 'Asia/Shanghai'
   });
 
-  console.log('[Scheduler] Summary push scheduled with cron:', cronExpression);
+  logger.info('summary.scheduled', { cronExpression });
 }
 
 export function stopSummaryPushScheduler() {
   if (summaryTask) {
     summaryTask.stop();
     summaryTask = null;
-    console.log('[Scheduler] Summary push stopped.');
+    logger.info('summary.stopped');
   }
 }
 let cleanupTask = null;
@@ -174,36 +107,37 @@ let cleanupTask = null;
 export function startCleanupScheduler() {
   if (cleanupTask) return;
   if (process.env.CLEANUP_ENABLED === 'false') {
-    console.log('[Cleanup] Disabled.');
+    logger.info('cleanup.disabled');
     return;
   }
 
   const raw = process.env.CLEANUP_RETENTION_DAYS;
   const retentionDays = resolveRetentionDays();
   if (raw !== undefined && raw !== '' && parseInt(raw, 10) !== retentionDays) {
-    console.warn(`[Cleanup] Invalid CLEANUP_RETENTION_DAYS "${raw}", using default ${DEFAULT_RETENTION_DAYS}.`);
+    logger.warn('cleanup.invalid_retention', { retentionDays });
   }
 
   cleanupTask = cron.schedule('0 0 * * *', () => {
     try {
+      const startedAt = performance.now();
       const beforeDate = getCleanupCutoffDate();
       const deleted = cleanupOldArticles(beforeDate);
-      console.log(`[Cleanup] Deleted ${deleted} old articles.`);
+      logger.info('cleanup.completed', { beforeDate, deleted, durationMs: elapsedMs(startedAt) });
     } catch (err) {
-      console.error('[Cleanup] Failed:', err.message);
+      logger.error('cleanup.failed', errorDetails(err));
     }
   }, {
     timezone: 'Asia/Shanghai'
   });
 
-  console.log(`[Cleanup] Scheduler started. Retention: ${retentionDays} days.`);
+  logger.info('cleanup.scheduled', { cronExpression: '0 0 * * *', retentionDays });
 }
 
 export function stopCleanupScheduler() {
   if (cleanupTask) {
     cleanupTask.stop();
     cleanupTask = null;
-    console.log('[Cleanup] Scheduler stopped.');
+    logger.info('cleanup.stopped');
   }
 }
 
@@ -213,9 +147,9 @@ let audioCleanupTask = null;
 function clearExpiredAudio() {
   try {
     const cleared = cleanupExpiredXinwenlianboAudio();
-    if (cleared) console.log(`[Xinwenlianbo] Cleared ${cleared} expired recordings.`);
+    logger[cleared ? 'info' : 'debug']('broadcast_audio_cleanup.completed', { cleared });
   } catch (err) {
-    console.error('[Xinwenlianbo] Audio cleanup failed:', err.message);
+    logger.error('broadcast_audio_cleanup.failed', errorDetails(err));
   }
 }
 
@@ -226,29 +160,29 @@ export function startXinwenlianboScheduler() {
     audioCleanupTask = cron.schedule('0 * * * *', clearExpiredAudio, { timezone: 'Asia/Shanghai' });
   }
   if (process.env.XINWENLIANBO_ENABLED === 'false') {
-    console.log('[Xinwenlianbo] Scheduler disabled.');
+    logger.info('broadcast.disabled');
     return;
   }
 
   const cronExpression = process.env.XINWENLIANBO_CRON || '0 19 * * *';
   if (!cron.validate(cronExpression)) {
-    console.error('[Xinwenlianbo] Invalid XINWENLIANBO_CRON. Recording scheduler was not started.');
+    logger.error('broadcast.invalid_cron');
     return;
   }
 
   xinwenlianboTask = cron.schedule(cronExpression, async () => {
     try {
       const today = getXinwenlianboDate();
-      console.log(`[Xinwenlianbo] Scheduled task triggered for ${today}`);
+      logger.info('broadcast.started', { date: today });
       await runXinwenlianboTask(today);
     } catch (err) {
-      console.error('[Xinwenlianbo] Scheduled task failed:', err.message);
+      logger.error('broadcast.failed', errorDetails(err));
     }
   }, {
     timezone: 'Asia/Shanghai'
   });
 
-  console.log('[Xinwenlianbo] Scheduler started with cron:', cronExpression);
+  logger.info('broadcast.scheduled', { cronExpression });
 }
 
 export function stopXinwenlianboScheduler() {
@@ -257,6 +191,6 @@ export function stopXinwenlianboScheduler() {
   if (xinwenlianboTask) {
     xinwenlianboTask.stop();
     xinwenlianboTask = null;
-    console.log('[Xinwenlianbo] Scheduler stopped.');
+    logger.info('broadcast.stopped');
   }
 }

@@ -1,7 +1,9 @@
 import Parser from 'rss-parser';
 import { setTimeout as delay } from 'node:timers/promises';
-import { getDb } from '../db.js';
-import { insertArticle } from '../models/article.js';
+import { insertArticles } from '../models/article.js';
+import { createLogger, elapsedMs, errorDetails } from '../utils/logger.js';
+
+const logger = createLogger('rss');
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
@@ -147,14 +149,16 @@ async function fetchFeed(url) {
   }
 }
 
-async function fetchWithRetry(url) {
+async function fetchWithRetry(url, sourceId) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await fetchFeed(url);
     } catch (err) {
       if (!err.retryable || attempt >= MAX_ATTEMPTS || err.retryAfterMs > MAX_RETRY_DELAY_MS) throw err;
       const backoff = 500 * 2 ** (attempt - 1) + Math.floor(Math.random() * 250);
-      await delay(Math.max(backoff, err.retryAfterMs));
+      const waitMs = Math.max(backoff, err.retryAfterMs);
+      logger.warn('feed.retry', { sourceId, attempt, waitMs, errorType: err.type, ...errorDetails(err) });
+      await delay(waitMs);
     }
   }
 }
@@ -162,7 +166,9 @@ async function fetchWithRetry(url) {
 export async function crawlSource(source) {
   const url = articleUrl(source.rssUrl);
   if (!url) throw new FeedError('format', 'RSS 地址必须是有效的 HTTP 或 HTTPS URL');
-  const { items, baseUrl } = await fetchWithRetry(url);
+  const startedAt = performance.now();
+  const { items, baseUrl } = await fetchWithRetry(url, source.id);
+  const fetchMs = elapsedMs(startedAt);
   const articles = items
     .map((item) => normalizeArticle(item, source.id, baseUrl))
     .filter((article) => article.title && article.originalUrl);
@@ -170,21 +176,19 @@ export async function crawlSource(source) {
     throw new FeedError('format', 'RSS 返回的条目没有有效标题和链接');
   }
 
-  const db = getDb();
-  db.exec('SAVEPOINT rss_ingestion');
-  try {
-    const results = [];
-    for (const article of articles) {
-      const id = insertArticle(article);
-      if (id) results.push({ ...article, id });
-    }
-    db.exec('RELEASE rss_ingestion');
-    return results;
-  } catch (err) {
-    db.exec('ROLLBACK TO rss_ingestion');
-    db.exec('RELEASE rss_ingestion');
-    throw err;
-  }
+  const storageStartedAt = performance.now();
+  const inserted = insertArticles(articles);
+  logger.info('feed.completed', {
+    sourceId: source.id,
+    received: items.length,
+    invalid: items.length - articles.length,
+    duplicates: articles.length - inserted.length,
+    inserted: inserted.length,
+    fetchMs,
+    storageMs: elapsedMs(storageStartedAt),
+    durationMs: elapsedMs(startedAt)
+  });
+  return inserted;
 }
 
 export async function crawlAllSources(sources, crawl = crawlSource) {
@@ -200,7 +204,7 @@ export async function crawlAllSources(sources, crawl = crawlSource) {
         results[index] = { source: source.name, count: articles.length, articles };
       } catch (err) {
         const { type, message } = classifyError(err);
-        console.error(`Failed to crawl ${source.name}:`, message);
+        logger[type === 'unknown' ? 'error' : 'warn']('feed.failed', { sourceId: source.id, errorType: type, ...errorDetails(err) });
         results[index] = { source: source.name, count: 0, error: message, errorType: type };
       }
     }
