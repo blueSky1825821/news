@@ -7,7 +7,7 @@ import { getDb } from '../db.js';
 import { createLogger, elapsedMs, errorDetails, getTriggeredAt, withLogTrigger } from '../utils/logger.js';
 import { crawlActiveRssSources } from './crawlService.js';
 import { cleanupOldArticles } from '../models/article.js';
-import { cleanupExpiredXinwenlianboAudio, getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
+import { getXinwenlianboDate, runXinwenlianboTask } from './xinwenlianbo/orchestrator.js';
 
 export { triggerManualCrawl, triggerManualCrawlForSource } from './crawlService.js';
 
@@ -145,32 +145,14 @@ export function stopCleanupScheduler() {
 }
 
 let xinwenlianboTask = null;
-let audioCleanupTask = null;
-
-function clearExpiredAudio() {
-  return withLogTrigger(() => {
-    const triggeredAt = getTriggeredAt();
-    try {
-      const cleared = cleanupExpiredXinwenlianboAudio();
-      logger[cleared ? 'info' : 'debug']('broadcast_audio_cleanup.completed', { triggeredAt, cleared });
-    } catch (err) {
-      logger.error('broadcast_audio_cleanup.failed', { triggeredAt, ...errorDetails(err) });
-    }
-  });
-}
-
 export function startXinwenlianboScheduler() {
   if (xinwenlianboTask) return;
-  if (!audioCleanupTask) {
-    clearExpiredAudio();
-    audioCleanupTask = cron.schedule('0 * * * *', clearExpiredAudio, { timezone: 'Asia/Shanghai' });
-  }
   if (process.env.XINWENLIANBO_ENABLED === 'false') {
     logger.info('broadcast.disabled');
     return;
   }
 
-  const cronExpression = process.env.XINWENLIANBO_CRON || '0 19 * * *';
+  const cronExpression = process.env.XINWENLIANBO_CRON || '* 19-23 * * *';
   if (!cron.validate(cronExpression)) {
     logger.error('broadcast.invalid_cron');
     return;
@@ -180,7 +162,6 @@ export function startXinwenlianboScheduler() {
     const triggeredAt = getTriggeredAt();
     try {
       const today = getXinwenlianboDate();
-      logger.info('broadcast.started', { triggeredAt, date: today });
       await runXinwenlianboTask(today);
     } catch (err) {
       logger.error('broadcast.failed', { triggeredAt, ...errorDetails(err) });
@@ -193,8 +174,6 @@ export function startXinwenlianboScheduler() {
 }
 
 export function stopXinwenlianboScheduler() {
-  audioCleanupTask?.stop();
-  audioCleanupTask = null;
   if (xinwenlianboTask) {
     xinwenlianboTask.stop();
     xinwenlianboTask = null;

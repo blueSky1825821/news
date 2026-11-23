@@ -151,7 +151,6 @@ export function initSchema(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       taskDate TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'pending',
-      audioFilePath TEXT,
       transcript TEXT,
       summary TEXT,
       headlines TEXT,
@@ -160,14 +159,6 @@ export function initSchema(db) {
       errorMessage TEXT,
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE TABLE IF NOT EXISTS xinwenlianbo_audio (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      taskId INTEGER NOT NULL REFERENCES xinwenlianbo_tasks(id) ON DELETE CASCADE,
-      audioFilePath TEXT NOT NULL UNIQUE,
-      startedAt DATETIME
-    );
-    CREATE INDEX IF NOT EXISTS idx_xinwenlianbo_audio_task ON xinwenlianbo_audio(taskId, id DESC);
 
     CREATE TABLE IF NOT EXISTS email_verification_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,6 +245,10 @@ export function initSchema(db) {
   const hasHeadlinesColumn = db.prepare(`SELECT COUNT(*) as count FROM pragma_table_info('articles') WHERE name = 'headlines'`).get().count > 0;
   if (!hasHeadlinesColumn) {
     db.exec(`ALTER TABLE articles ADD COLUMN headlines TEXT`);
+  }
+
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('xinwenlianbo_tasks') WHERE name = 'webNews'").get()) {
+    db.exec('ALTER TABLE xinwenlianbo_tasks ADD COLUMN webNews TEXT');
   }
 
   const hasEmailVerified = db.prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = 'emailVerified'").get();

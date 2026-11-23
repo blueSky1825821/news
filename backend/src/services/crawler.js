@@ -1,7 +1,10 @@
 import Parser from 'rss-parser';
 import { setTimeout as delay } from 'node:timers/promises';
 import { insertArticles } from '../models/article.js';
+import { articleUrl, itemText, normalizeArticle } from './feedArticle.js';
 import { createLogger, elapsedMs, errorDetails } from '../utils/logger.js';
+
+export { normalizeArticle } from './feedArticle.js';
 
 const logger = createLogger('rss');
 
@@ -25,7 +28,15 @@ class FeedParser extends Parser {
   }
 }
 
-const parser = new FeedParser({ defaultRSS: 2 });
+const parser = new FeedParser({
+  defaultRSS: 2,
+  customFields: {
+    item: [
+      ['media:content', 'mediaContent', { keepArray: true }],
+      ['media:thumbnail', 'mediaThumbnails', { keepArray: true }]
+    ]
+  }
+});
 const headers = {
   'User-Agent': 'NewsBroadcastingBot/1.0',
   Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.5',
@@ -40,36 +51,6 @@ class FeedError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.cooldownMs = cooldownMs;
   }
-}
-
-function itemText(value) {
-  const text = typeof value === 'string' ? value : value?._;
-  return typeof text === 'string' ? text.trim() : '';
-}
-
-function articleUrl(value, baseUrl) {
-  const text = itemText(value);
-  if (!text) return '';
-  try {
-    const url = new URL(text, baseUrl);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return '';
-    // Keep existing absolute URLs stable for the database's unique URL constraint.
-    return /^https?:\/\//i.test(text) ? text : url.href;
-  } catch {
-    return '';
-  }
-}
-
-export function normalizeArticle(item, sourceId, baseUrl) {
-  const date = [item?.isoDate, item?.pubDate, item?.date].map(itemText).map(Date.parse).find(Number.isFinite);
-  return {
-    title: itemText(item?.title),
-    summary: itemText(item?.contentSnippet) || itemText(item?.summary) || itemText(item?.description),
-    content: itemText(item?.['content:encoded']) || itemText(item?.content),
-    originalUrl: articleUrl(item?.link, baseUrl) || articleUrl(item?.guid) || articleUrl(item?.id),
-    sourceId,
-    publishedAt: date === undefined ? null : new Date(date).toISOString()
-  };
 }
 
 export function classifyError(err) {

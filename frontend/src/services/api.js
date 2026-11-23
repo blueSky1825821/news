@@ -30,6 +30,8 @@ export const api = {
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.sourceId) qs.set('sourceId', String(params.sourceId));
     if (params.view) qs.set('view', params.view);
+    if (params.date) qs.set('date', params.date);
+    if (params.q) qs.set('q', params.q);
     for (const category of [params.category].flat().filter(Boolean)) qs.append('category', category);
     const query = qs.toString();
     return request('/api/articles' + (query ? '?' + query : ''), options);
@@ -194,28 +196,13 @@ export const api = {
   getXinwenlianboStatus(options = {}) {
     return request('/api/xinwenlianbo/status', options);
   },
-  triggerXinwenlianbo({ durationMinutes, force = false } = {}) {
+  triggerXinwenlianbo({ force = false } = {}) {
     return request(`/api/xinwenlianbo/trigger${force ? '?force=true' : ''}`, {
-      method: 'POST', body: JSON.stringify({ durationMinutes })
+      method: 'POST'
     });
-  },
-  stopXinwenlianbo({ finish = false } = {}) {
-    return request('/api/xinwenlianbo/stop', { method: 'POST', body: JSON.stringify({ finish }) });
   },
   getXinwenlianboTasks(page = 1, options = {}) {
     return request(`/api/xinwenlianbo/tasks?page=${page}`, options);
-  },
-  async getXinwenlianboAudio(taskId, audioId, { signal } = {}) {
-    const token = localStorage.getItem('news-auth-token');
-    const res = await fetch(`${BASE_URL}/api/xinwenlianbo/tasks/${taskId}/audio/${audioId}`, {
-      signal,
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    });
-    if (!res.ok) throw new Error('录音加载失败，请重试。');
-    return res.blob();
-  },
-  deleteXinwenlianboAudio(taskId, audioId) {
-    return request(`/api/xinwenlianbo/tasks/${taskId}/audio/${audioId}`, { method: 'DELETE' });
   },
   getXinwenlianboRecord(id, options = {}) {
     return request(`/api/xinwenlianbo/tasks/${id}`, options);
@@ -224,12 +211,6 @@ export const api = {
     return request(`/api/xinwenlianbo/tasks/${id}`, {
       method: 'DELETE', body: JSON.stringify({ deleteArticle })
     });
-  },
-  summarizeXinwenlianboRecord(id) {
-    return request(`/api/xinwenlianbo/tasks/${id}/summarize`, { method: 'POST' });
-  },
-  getXinwenlianboConfig() {
-    return request('/api/xinwenlianbo/config');
   },
 
   // Email verification & password

@@ -1,4 +1,4 @@
-export const NEWS_RATE = 0.95;
+export const NEWS_RATE = 0.9;
 
 export const ANCHOR_VOICES = [
   { id: 'anchor:male', label: '男主持人', names: ['Yunyang', 'Yunxi', 'Yunfeng', 'Kangkang'] },
@@ -11,6 +11,7 @@ const englishPhrase = /[A-Za-z]+[A-Za-z0-9]*(?:[.'’+#-][A-Za-z0-9]+)*(?:[+#]+)
 const initialisms = /\b(?:AI|API|CPU|GPU|HTML|HTTP|HTTPS|iOS|SDK|UI|URL|USB|VR)\b/g;
 const englishPunctuation = { '。': '.', '，': ',', '！': '!', '？': '?', '；': ';', '：': ':', '、': ',' };
 const hasSpeech = /[\p{L}\p{N}]/u;
+const naturalVoice = (voice) => /natural|neural|online|premium|enhanced|自然|神经/i.test(voice.name);
 
 export function speechText(value = '') {
   if (!value) return '';
@@ -30,7 +31,8 @@ export function resolveAnchorVoice(voices, preset) {
   const mandarin = voices.filter((voice) => /^zh-(?:CN|Hans)(?:-|$)/i.test(voice.lang));
   for (const name of preset.names) {
     const pattern = new RegExp(`\\b${name}(?:Neural)?\\b`, 'i');
-    const voice = mandarin.find((candidate) => pattern.test(candidate.name));
+    const matches = mandarin.filter((candidate) => pattern.test(candidate.name));
+    const voice = matches.find(naturalVoice) || matches[0];
     if (voice) return voice;
   }
 }
@@ -39,17 +41,15 @@ export function resolveSpeechVoices(voices, voiceURI, englishVoiceURI) {
   const chinese = voices.filter((voice) => /^zh(?:-|$)/i.test(voice.lang));
   const mandarin = chinese.filter((voice) => /^zh-(?:CN|Hans)(?:-|$)/i.test(voice.lang));
   const english = voices.filter((voice) => /^en(?:-|$)/i.test(voice.lang));
-  const natural = (voice) => /natural|neural|online|premium|enhanced/i.test(voice.name);
-
   const preset = ANCHOR_VOICES.find(({ id }) => id === voiceURI);
   const anchor = preset && resolveAnchorVoice(voices, preset);
 
   return {
-    chinese: anchor || chinese.find((voice) => voice.voiceURI === voiceURI)
-      || mandarin.find(natural) || mandarin[0] || chinese.find(natural) || chinese[0],
-    english: english.find((voice) => voice.voiceURI === englishVoiceURI)
-      || english.find((voice) => natural(voice) && /^en-us$/i.test(voice.lang))
-      || english.find(natural) || english.find((voice) => /^en-us$/i.test(voice.lang))
+    chinese: anchor || (voiceURI && chinese.find((voice) => voice.voiceURI === voiceURI))
+      || mandarin.find(naturalVoice) || mandarin[0] || chinese.find(naturalVoice) || chinese[0],
+    english: (englishVoiceURI && english.find((voice) => voice.voiceURI === englishVoiceURI))
+      || english.find((voice) => naturalVoice(voice) && /^en-us$/i.test(voice.lang))
+      || english.find(naturalVoice) || english.find((voice) => /^en-us$/i.test(voice.lang))
       || english[0]
   };
 }
@@ -64,8 +64,12 @@ export function speechSegments(value, englishVoice) {
   }
 
   function sentence(text) {
-    if (!englishVoice && /\p{Script=Han}/u.test(text)) {
-      append(text.replace(/\bandroid\b/gi, '安卓').replace(initialisms, spellOut), 'zh-CN');
+    if (/\p{Script=Han}/u.test(text)) {
+      append(text.replace(/\bandroid\b/gi, '安卓'), 'zh-CN');
+      return;
+    }
+    if (!englishVoice) {
+      append(text, /[A-Za-z]/.test(text) ? 'en-US' : 'zh-CN');
       return;
     }
 

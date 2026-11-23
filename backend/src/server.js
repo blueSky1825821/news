@@ -25,7 +25,7 @@ const server = withLogTrigger(() => {
 
   // Recover orphaned xinwenlianbo tasks from previous crash
   const db = getDb();
-  const orphaned = db.prepare(`UPDATE xinwenlianbo_tasks SET status = 'failed', errorMessage = 'Service interrupted' WHERE status IN ('recording', 'finishing', 'stopping', 'transcribing', 'summarizing')`).run();
+  const orphaned = db.prepare(`UPDATE xinwenlianbo_tasks SET status = 'failed', errorMessage = 'Service interrupted' WHERE status NOT IN ('pending', 'completed', 'failed', 'cancelled')`).run();
   if (orphaned.changes > 0) {
     logConsole('log', `[Xinwenlianbo] Recovered ${orphaned.changes} orphaned task(s) from previous crash.`);
   }

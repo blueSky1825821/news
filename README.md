@@ -149,22 +149,13 @@ npm run deploy
 # 仅重新安装前端和后端 npm 依赖
 npm run deploy -- --reinstall-npm
 
-# 重装 npm 依赖。Linux 同时重装 FFmpeg、重建托管的 Whisper 并重新下载模型
+# 重装前端和后端 npm 依赖
 npm run deploy -- --reinstall
 ```
 
-Linux 默认也会复用 FFmpeg、Whisper 和已有模型。Whisper 检查当前环境变量及 `backend/.env` 中配置的路径，未指定时检查 `INSTALL_DIR` 下的托管目录（默认 `/opt/whisper.cpp`）。重装系统组件只操作托管的 Whisper 和模型路径。若使用自定义的外部安装，部署会继续按原配置使用它。Windows 部署只管理 npm 依赖，两种重装参数等效，也可直接使用 `scripts\deploy.ps1 -Reinstall`。
+### 央视网新闻联播
 
-Linux 首次下载 Whisper 模型时默认使用 `https://hf-mirror.com`。可用 `HF_ENDPOINT=https://huggingface.co npm run deploy` 临时切换下载地址，或通过 `WHISPER_MODEL_PATH` 指向服务器上已有的模型文件。
-
-托管安装默认使用多语种模型 `large-v3-turbo-q5_0`（约 547 MiB）。已有安装若仍使用 `base-q5_1`，可在项目根目录执行以下命令下载新模型（以默认安装目录为例）。
-
-```bash
-WHISPER_MODEL_PATH=/opt/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin bash scripts/install-xinwenlianbo-deps.sh
-```
-
-下载完成后，将 `backend/.env` 中的 `WHISPER_MODEL_PATH` 改为新模型路径，再重启后端。CPU 转录可能比旧模型耗时更长。
-
+每天北京时间 19:00 起每分钟检查央视网栏目页，仅读取当天第一个《新闻联播》完整版的「内容简介」。简介发布后原样保存为当日主要内容，附完整版原文链接。保存成功后当天停止请求；若午夜前仍未发布，次日按新日期开始。管理员也可以手动抓取。
 
 后端会将 `frontend/dist` 作为静态文件挂载到 `/news` 提供服务，并支持前端路由 fallback。访问 `http://localhost:3000/news/` 即可使用。
 

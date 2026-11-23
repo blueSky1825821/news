@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ProfileSettings from './ProfileSettings.jsx';
 import TtsSettings from './TtsSettings.jsx';
 
@@ -8,7 +9,8 @@ const TABS = [
 ];
 
 export default function SettingsPage({ settings, onChange, user, onUpdateCategories, onUpdateProfile, onChangePassword, voices = [], onPreview }) {
-  const [activeTab, setActiveTab] = useState('profile');
+  const [params, setParams] = useSearchParams();
+  const activeTab = params.get('tab') === 'tts' ? 'tts' : 'profile';
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -17,7 +19,9 @@ export default function SettingsPage({ settings, onChange, user, onUpdateCategor
           {TABS.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              type="button"
+              aria-pressed={activeTab === tab.key}
+              onClick={() => setParams(tab.key === 'tts' ? { tab: 'tts' } : {})}
               className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium ${
                 activeTab === tab.key
                   ? 'bg-blue-50 text-blue-700'

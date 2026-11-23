@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { useSpeech } from './hooks/useSpeech.js';
 import { useTtsSettings } from './hooks/useTtsSettings.js';
@@ -9,18 +9,22 @@ import AutoPlayBar from './components/AutoPlayBar.jsx';
 import EmailVerificationBanner from './components/EmailVerificationBanner.jsx';
 import { api } from './services/api.js';
 
-function articlePlayback(article, mode) {
+function articlePlayback(article, mode, onMissingFull) {
   if (mode !== 'full') return { title: article.title, summary: article.summary, mode };
 
   const fullItem = (details) => {
     const content = details.transcript || details.content;
-    if (!content?.trim()) throw new Error(`《${details.title}》暂无可播报的全文。`);
+    if (!content?.trim()) {
+      onMissingFull(details.title);
+      return { title: details.title, summary: details.summary, mode: 'summary' };
+    }
     return { title: details.title, content, mode };
   };
   if ((article.transcript || article.content)?.trim()) return fullItem(article);
   return {
     async load(signal) {
       const details = await api.getArticle(article.id, { signal });
+      if (signal.aborted) return;
       return fullItem(details);
     }
   };
@@ -67,6 +71,8 @@ export default function App() {
   } = useSpeech(settings);
 
   const [activeArticleId, setActiveArticleId] = useState(null);
+  const [playMode, setPlayMode] = useState('');
+  const [playbackNotice, setPlaybackNotice] = useState('');
   const playingArticlesRef = useRef([]);
 
   useEffect(() => {
@@ -80,19 +86,22 @@ export default function App() {
     }
   }, [currentIndex, total]);
 
-  const handlePlaySingle = (article, mode) => {
-    playingArticlesRef.current = [article];
-    setActiveArticleId(article.id);
-    playSingle(articlePlayback(article, mode));
-  };
-
   const handlePlayAll = (articles, mode) => {
+    if (!isSupported || !articles.length) return;
+    setPlayMode(mode);
+    setPlaybackNotice('');
     playingArticlesRef.current = articles;
     setActiveArticleId(articles[0]?.id || null);
-    playQueue(articles.map(article => articlePlayback(article, mode)));
+    playQueue(articles.map(article => articlePlayback(article, mode, (title) => {
+      setPlaybackNotice(`《${title}》暂无可播报的全文，已改为播报标题和可用摘要。`);
+    })));
   };
 
+  const handlePlaySingle = (article, mode = settings.defaultMode) => handlePlayAll([article], mode);
+
   const handlePlayText = (item) => {
+    setPlayMode('');
+    setPlaybackNotice('');
     playingArticlesRef.current = [];
     setActiveArticleId(null);
     playSingle(item);
@@ -100,6 +109,7 @@ export default function App() {
 
   const handleStop = () => {
     stop();
+    setPlaybackNotice('');
     setActiveArticleId(null);
   };
 
@@ -129,6 +139,9 @@ export default function App() {
         total={total}
         isPlaying={isPlaying}
         isLoadingArticle={isLoadingArticle}
+        mode={playMode}
+        notice={playbackNotice}
+        onChangeMode={(mode) => handlePlayAll(playingArticlesRef.current.slice(currentIndex), mode)}
         onPause={pause}
         onResume={resume}
         onNext={next}

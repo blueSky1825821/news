@@ -25,7 +25,16 @@ router.get('/', (req, res, next) => {
     const category = [req.query.category].flat()
       .filter((value) => typeof value === 'string' && value.trim())
       .slice(0, 30);
-    const result = listArticles({ page, limit, sourceId, category, cards, viewerId });
+    const date = typeof req.query.date === 'string' ? req.query.date : '';
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00+08:00`) : null;
+    const validDate = start && Number.isFinite(start.getTime()) &&
+      new Date(start.getTime() + 8 * 3600000).toISOString().slice(0, 10) === date;
+    if (req.query.date !== undefined && !validDate) return res.status(400).sendJson(400, '请选择有效的发布日期');
+    const publishedRange = validDate
+      ? [start.toISOString(), new Date(start.getTime() + 86400000).toISOString()]
+      : undefined;
+    const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+    const result = listArticles({ page, limit, sourceId, category, cards, viewerId, publishedRange, query });
     res.sendJson(0, 'success', result);
   } catch (err) {
     next(err);

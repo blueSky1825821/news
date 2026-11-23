@@ -1,63 +1,10 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import DOMPurify from 'dompurify';
+import { prepareArticleContent } from '../services/articleContent.js';
 import { api } from '../services/api.js';
 import { readNewsHeadlines } from '../services/newsHeadlines.js';
 import LikeButton from './LikeButton.jsx';
 import CommentSection from './CommentSection.jsx';
-
-const ALLOWED_TAGS = [
-  'p', 'br', 'img', 'a', 'h1', 'h2', 'h3',
-  'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol',
-  'li', 'video', 'source', 'iframe', 'div', 'span'
-];
-
-const IFRAME_WHITELIST = [
-  'bilibili.com',
-  'player.bilibili.com',
-  'youtube.com',
-  'www.youtube.com',
-  'youtu.be',
-  'youku.com',
-  'player.youku.com',
-  'iqiyi.com',
-  'player.iqiyi.com',
-  'v.qq.com',
-  'open.iqiyi.com'
-];
-
-function isIframeAllowed(src) {
-  if (!src) return false;
-  try {
-    const url = new URL(src);
-    return IFRAME_WHITELIST.some((domain) => url.hostname.endsWith(domain));
-  } catch {
-    return false;
-  }
-}
-
-function prepareArticleContent(content) {
-  const cleanHtml = DOMPurify.sanitize(content || '', {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'width', 'height', 'frameborder', 'allowfullscreen', 'controls', 'type'],
-    KEEP_CONTENT: true
-  });
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(cleanHtml, 'text/html');
-  doc.querySelectorAll('iframe').forEach((iframe) => {
-    const src = iframe.getAttribute('src');
-    if (!isIframeAllowed(src)) {
-      iframe.remove();
-    }
-  });
-  doc.querySelectorAll('img').forEach((img) => {
-    img.setAttribute('referrerpolicy', 'no-referrer');
-    img.setAttribute('loading', 'lazy');
-    img.setAttribute('decoding', 'async');
-  });
-  return doc.body.innerHTML;
-}
 
 export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSendEnabled = false }) {
   const { id } = useParams();
@@ -88,10 +35,13 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
   }, [id, attempt, user?.id]);
 
   useEffect(() => {
-    if (!article || !isAdmin) { setIsFlagged(false); return; }
+    setIsFlagged(false);
+    if (!article?.id || !isAdmin) return;
+    let current = true;
     api.getFlaggedArticleIds().then((data) => {
-      setIsFlagged(data.articleIds?.includes(article.id) || false);
+      if (current) setIsFlagged(data.articleIds?.includes(article.id) || false);
     }).catch(() => {});
+    return () => { current = false; };
   }, [article?.id, isAdmin]);
 
   const handleToggleFlag = async () => {
@@ -121,7 +71,7 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
   };
 
   const headlines = readNewsHeadlines(article?.headlines);
-  const html = useMemo(() => prepareArticleContent(article?.content), [article?.content]);
+  const html = useMemo(() => prepareArticleContent(article?.content, article?.originalUrl), [article?.content, article?.originalUrl]);
 
   if (loading) {
     return (
@@ -235,10 +185,10 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
         )}
       </div>
 
-      {article.category === 'xinwenlianbo' && article.transcript && (
+      {article.category === 'xinwenlianbo' && article.transcript && article.transcript !== article.summary && (
         <details className="mt-4">
           <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
-            查看完整转录文字
+            查看新闻正文
           </summary>
           <div className="mt-2 max-h-96 overflow-y-auto rounded bg-gray-50 p-4 text-sm text-gray-600">
             {article.transcript}

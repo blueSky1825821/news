@@ -102,7 +102,7 @@ function queryPage({ cards, viewerId, where, filters, limit, offset }) {
   return cards ? items.map(item => ({ ...item, liked: Boolean(item.liked) })) : items;
 }
 
-export function listArticles({ page = 1, limit = 20, sourceId, category, cards, viewerId = null } = {}) {
+export function listArticles({ page = 1, limit = 20, sourceId, category, cards, viewerId = null, publishedRange, query } = {}) {
   const db = getDb();
   const maxLimit = Math.min(limit, 100);
   const offset = (page - 1) * maxLimit;
@@ -118,6 +118,16 @@ export function listArticles({ page = 1, limit = 20, sourceId, category, cards, 
   if (categories.length > 0) {
     conditions.push(`s.category IN (${categories.map(() => '?').join(', ')})`);
     params.push(...categories);
+  }
+  if (publishedRange) {
+    conditions.push('datetime(a.publishedAt) >= datetime(?) AND datetime(a.publishedAt) < datetime(?)');
+    params.push(...publishedRange);
+  }
+  if (query) {
+    for (const term of query.split(/\s+/)) {
+      conditions.push("(instr(lower(a.title), lower(?)) > 0 OR instr(lower(coalesce(a.summary, '')), lower(?)) > 0)");
+      params.push(term, term);
+    }
   }
 
   const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';

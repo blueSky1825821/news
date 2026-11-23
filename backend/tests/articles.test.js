@@ -41,6 +41,26 @@ describe('Articles API', () => {
     expect(res.body.data.pagination.total).toBe(1);
   });
 
+  it('combines a Beijing publication date, search terms, source and a requested page', async () => {
+    const sourceId = getAllSources()[0].id;
+    const add = (suffix, publishedAt, summary = '市场 AI') => insertArticle({
+      title: `行业观察 ${suffix}`, summary, sourceId, originalUrl: `https://example.com/${suffix}`, publishedAt
+    });
+    const midnight = add('midnight', '2026-11-22T16:00:00.000Z');
+    add('evening', '2026-11-23T15:59:59.000Z');
+    add('before', '2026-11-22T15:59:59.000Z');
+    add('after', '2026-11-23T16:00:00.000Z');
+    add('missing-term', '2026-11-23T10:00:00.000Z', '市场');
+    add('undated', null);
+
+    const result = await request(app).get('/api/articles').query({
+      date: '2026-11-23', q: '行业 ai', sourceId, category: 'tech', page: 2, limit: 1, view: 'card'
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.data).toMatchObject({ items: [{ id: midnight }], pagination: { page: 2, total: 2, totalPages: 2 } });
+    expect((await request(app).get('/api/articles?date=2026-02-30')).status).toBe(400);
+  });
+
   it('returns compact cards with like counts and viewer-specific state', async () => {
     const source = getAllSources()[0];
     const id = insertArticle({ title: 'A1', summary: 'Summary', content: '<p>Full article</p>',

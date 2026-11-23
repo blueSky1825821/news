@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
-import XinwenlianboRecording from './XinwenlianboRecording.jsx';
+import XinwenlianboCollection from './XinwenlianboCollection.jsx';
 
 function formatHealthTime(value) {
   return value ? new Date(value).toLocaleString('zh-CN') : '—';
@@ -17,7 +17,7 @@ export default function SourceManager() {
   const [crawlingAll, setCrawlingAll] = useState(false);
   const [threshold, setThreshold] = useState(5);
   const [thresholdLoading, setThresholdLoading] = useState(false);
-  const [recordingRefresh, setRecordingRefresh] = useState(0);
+  const [collectionRefresh, setCollectionRefresh] = useState(0);
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -184,7 +184,7 @@ export default function SourceManager() {
             返回首页
           </Link>
           <button
-            onClick={() => { fetchHealth(); setRecordingRefresh(value => value + 1); }}
+            onClick={() => { fetchHealth(); setCollectionRefresh(value => value + 1); }}
             disabled={loading}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -201,7 +201,7 @@ export default function SourceManager() {
       </header>
 
       {sources.some(source => source.type === 'xinwenlianbo') && (
-        <XinwenlianboRecording refresh={recordingRefresh} />
+        <XinwenlianboCollection refresh={collectionRefresh} />
       )}
 
       {inactiveCount > 0 && (

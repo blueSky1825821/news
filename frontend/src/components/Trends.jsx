@@ -88,6 +88,7 @@ function TrendDetail({ item, board, onClose }) {
         <p className="mt-4 whitespace-pre-line break-words leading-relaxed text-gray-700">
           {item.description || '该榜单只提供话题标题和排名。'}
         </p>
+        <a className="news-action mt-4" href={item.url} target="_blank" rel="noopener noreferrer">打开平台原文</a>
         {board.updatedAt && (
           <p className="mt-4 text-xs text-gray-600">获取于 <time dateTime={board.updatedAt}>
             {timeFormat.format(new Date(board.updatedAt))}

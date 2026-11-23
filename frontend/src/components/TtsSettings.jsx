@@ -1,6 +1,6 @@
 import { ANCHOR_VOICES, resolveAnchorVoice, resolveSpeechVoices } from '../services/speech.js';
 
-const previewText = '各位好，欢迎收听新闻。今天我们关注 Android 16 的最新进展，以及人工智能在移动设备上的应用。';
+const previewText = '这里是闻序。今天，我们关注科技领域的新进展，以及人工智能在移动设备上的应用。';
 
 const englishPreviewText = 'Good evening. Here are today’s headlines. Android 16 brings new features to mobile devices.';
 

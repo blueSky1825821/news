@@ -5,6 +5,10 @@ export const PREDEFINED_CATEGORIES = [
   { name: 'politics', label: '时政' },
   { name: 'sports', label: '体育' },
   { name: 'entertainment', label: '娱乐' },
+  { name: 'culture', label: '文化' },
+  { name: 'education', label: '教育' },
+  { name: 'health', label: '健康' },
+  { name: 'life', label: '生活' },
   { name: 'general', label: '综合' }
 ];
 

@@ -5,7 +5,7 @@ const defaultSources = [
   ['人民日报-社会', 'http://www.people.com.cn/rss/society.xml', 'society'],
   ['人民日报-国际', 'http://www.people.com.cn/rss/world.xml', 'world'],
   ['新浪新闻-要闻', 'https://rss.sina.com.cn/news/china/focus15.xml', 'general'],
-  ['CCTV新闻联播', 'https://piccpndali.v.myalicdn.com/audio/cctv1_2.m3u8', 'xinwenlianbo', 'xinwenlianbo', 0]
+  ['CCTV新闻联播', 'https://tv.cctv.com/lm/xwlb/', 'xinwenlianbo', 'xinwenlianbo', 0]
 ];
 
 const additionalRssSources = [
@@ -27,6 +27,14 @@ const popularRssSources = [
   ['纽约时报中文网', 'https://cn.nytimes.com/rss/', 'general'],
   ['法国国际广播电台-中文', 'https://www.rfi.fr/cn/rss', 'general'],
   ['德国之声-中文', 'https://rss.dw.com/rdf/rss-chi-all', 'general']
+];
+
+const topicalRssSources = [
+  ['中国新闻网-文娱', 'https://www.chinanews.com.cn/rss/culture.xml', 'culture'],
+  ['中国新闻网-教育', 'https://www.chinanews.com.cn/rss/edu.xml', 'education'],
+  ['中国新闻网-健康', 'https://www.chinanews.com.cn/rss/jk.xml', 'health'],
+  ['中国新闻网-生活', 'https://www.chinanews.com.cn/rss/life.xml', 'life'],
+  ['NASA 喷气推进实验室（英文）', 'https://www.jpl.nasa.gov/feeds/news/', 'science']
 ];
 
 function seedSourceBatch(key, sources) {
@@ -60,4 +68,5 @@ export function seedSources() {
   seedSourceBatch('seed.defaultSources.v1', defaultSources);
   seedSourceBatch('seed.additionalRssSources.v1', additionalRssSources);
   seedSourceBatch('seed.additionalRssSources.v2', popularRssSources);
+  seedSourceBatch('seed.additionalRssSources.v3', topicalRssSources);
 }

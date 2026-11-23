@@ -44,6 +44,21 @@ function decodeHtmlText(value) {
   return value.replace(/&(amp|lt|gt|quot|apos|#39);/g, (_, entity) => entities[entity]);
 }
 
+async function loadTunbang(fetcher, path, getLink) {
+  const providerUrl = `https://tunbang.com/hot/${path}`;
+  const response = await fetchResponse(fetcher, providerUrl, 'text/html');
+  const html = await response.text();
+  const list = html.match(/<ol\b[^>]*\bid="list"[^>]*>([\s\S]*?)<\/ol>/i)?.[1] ?? '';
+  const items = normalizeItems(Array.from(list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi), ([, row]) => {
+    const link = row.match(/<a\b([^>]*\bclass="row-title"[^>]*)>([^<]*)<\/a>/i);
+    const title = decodeHtmlText(link?.[2] ?? '');
+    const href = decodeHtmlText(link?.[1].match(/\bhref="([^"]+)"/i)?.[1] ?? '');
+    const heat = row.match(/<span\b[^>]*\bclass="hot"[^>]*>([^<]*)<\/span>/i)?.[1];
+    return { title, url: getLink(title.trim(), href), heat };
+  }));
+  return { items, provider: '豚榜', providerUrl };
+}
+
 async function loadWeibo(fetcher) {
   try {
     const response = await fetchResponse(fetcher, 'https://weibo.com/ajax/side/hotSearch', 'application/json');
@@ -56,17 +71,44 @@ async function loadWeibo(fetcher) {
     return { items, provider: '微博' };
   } catch {
     // The public board can return a visitor page depending on the deployment network.
-    const providerUrl = 'https://tunbang.com/hot/weibo';
-    const response = await fetchResponse(fetcher, providerUrl, 'text/html');
-    const html = await response.text();
-    const list = html.match(/<ol\b[^>]*\bid="list"[^>]*>([\s\S]*?)<\/ol>/i)?.[1] ?? '';
-    const items = normalizeItems(Array.from(list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi), ([, row]) => {
-      const title = decodeHtmlText(row.match(/<a\b[^>]*\bclass="row-title"[^>]*>([^<]*)<\/a>/i)?.[1] ?? '');
-      const heat = row.match(/<span\b[^>]*\bclass="hot"[^>]*>([^<]*)<\/span>/i)?.[1];
-      return { title, url: weiboLink(title), heat };
-    }));
-    return { items, provider: '豚榜', providerUrl };
+    return loadTunbang(fetcher, 'weibo', weiboLink);
   }
+}
+
+function loadBilibili(fetcher) {
+  return loadTunbang(fetcher, 'bilibili/', (title, href) => {
+    const id = href.match(/^https:\/\/(?:b23\.tv\/|www\.bilibili\.com\/video\/)(BV[\da-z]+)(?:[/?#]|$)/i)?.[1];
+    return id ? `https://www.bilibili.com/video/${id}/` : `https://search.bilibili.com/all?keyword=${encodeURIComponent(title)}`;
+  });
+}
+
+function loadDouyin(fetcher) {
+  return loadTunbang(fetcher, 'douyin', (title, href) => {
+    const id = href.match(/^https:\/\/www\.douyin\.com\/hot\/(\d+)(?:[/?#]|$)/)?.[1];
+    return id ? `https://www.douyin.com/hot/${id}` : `https://www.douyin.com/search/${encodeURIComponent(title)}`;
+  });
+}
+
+async function loadDouban(fetcher) {
+  const response = await fetchResponse(fetcher, 'https://movie.douban.com/chart', 'text/html');
+  const html = await response.text();
+  const rows = Array.from(html.matchAll(/<tr\b[^>]*\bclass="item"[^>]*>([\s\S]*?)<\/tr>/gi), ([, row]) => {
+    const film = row.match(/<a\b[^>]*\bclass="nbg"[^>]*\bhref="https:\/\/movie\.douban\.com\/subject\/(\d+)\/"[^>]*\btitle="([^"]+)"/i);
+    const score = row.match(/<span\b[^>]*\bclass="rating_nums"[^>]*>([\d.]+)<\/span>/i)?.[1];
+    return { title: decodeHtmlText(film?.[2] ?? ''), url: film && `https://movie.douban.com/subject/${film[1]}/`, heat: score ? `评分 ${score}` : '' };
+  });
+  return { items: normalizeItems(rows), provider: '豆瓣' };
+}
+
+async function loadJuejin(fetcher) {
+  const response = await fetchResponse(fetcher, 'https://api.juejin.cn/content_api/v1/content/article_rank?category_id=1&type=hot', 'application/json');
+  const payload = await response.json();
+  const rows = (payload.data ?? []).map(({ content, content_counter: counters }) => {
+    const id = typeof content?.content_id === 'string' && /^\d+$/.test(content.content_id) ? content.content_id : null;
+    return { title: content?.title, url: id && `https://juejin.cn/post/${id}`, description: content?.brief,
+      heat: counters?.hot_rank == null ? '' : String(counters.hot_rank) };
+  });
+  return { items: normalizeItems(rows), provider: '稀土掘金' };
 }
 
 async function loadZhihu(fetcher) {
@@ -96,7 +138,11 @@ async function loadBaidu(fetcher) {
 const sources = [
   { id: 'weibo', name: '微博热搜', url: 'https://s.weibo.com/top/summary?cate=realtimehot', load: loadWeibo },
   { id: 'zhihu', name: '知乎热榜', url: 'https://www.zhihu.com/hot', load: loadZhihu },
-  { id: 'baidu', name: '百度热搜', url: 'https://top.baidu.com/board?tab=realtime', load: loadBaidu }
+  { id: 'baidu', name: '百度热搜', url: 'https://top.baidu.com/board?tab=realtime', load: loadBaidu },
+  { id: 'bilibili', name: '哔哩哔哩热门', url: 'https://www.bilibili.com/v/popular/all', load: loadBilibili },
+  { id: 'douyin', name: '抖音热榜', url: 'https://www.douyin.com/hot', load: loadDouyin },
+  { id: 'douban', name: '豆瓣电影新片榜', url: 'https://movie.douban.com/chart', load: loadDouban },
+  { id: 'juejin', name: '掘金热门文章', url: 'https://juejin.cn/', load: loadJuejin }
 ];
 
 export function createTrendsService({ fetcher = globalThis.fetch, now = Date.now } = {}) {

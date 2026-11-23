@@ -1,9 +1,9 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import LikeButton from './LikeButton.jsx';
 
-export default function NewsCard({ article, isActive, onPlay, isAdmin = false, variant = 'standard', user }) {
+export default function NewsCard({ article, isActive, onPlay, onOpen, related = [], isAdmin = false, variant = 'standard', user }) {
   const [isFlagged, setIsFlagged] = useState(false);
 
   useEffect(() => {
@@ -26,19 +26,19 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
   };
 
   return (
-    <article className={`news-story news-story--${variant}${isActive ? ' is-playing' : ''}`}>
+    <article id={`news-story-${article.id}`} className={`news-story news-story--${variant}${isActive ? ' is-playing' : ''}`}>
       <div className="news-story-meta">
         <span className="news-story-source">{article.sourceName}</span>
         {article.publishedAt && (
           <time dateTime={article.publishedAt}>
             {new Date(article.publishedAt).toLocaleString('zh-CN', {
-              month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+              timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
             })}
           </time>
         )}
       </div>
       <div className="news-story-heading">
-        <h3><Link to={`/article/${article.id}`}>{article.title}</Link></h3>
+        <h3><Link to={`/article/${article.id}`} onClick={onOpen}>{article.title}</Link></h3>
         {isAdmin && (
           <button
             onClick={handleToggleFlag}
@@ -51,14 +51,23 @@ export default function NewsCard({ article, isActive, onPlay, isAdmin = false, v
           </button>
         )}
       </div>
-      {variant !== 'brief' && article.summary && <p className="news-story-summary">{article.summary}</p>}
+      {article.summary && <p className="news-story-summary">{article.summary}</p>}
+      {related.length > 0 && (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer">另有 {related.length} 篇相关报道</summary>
+          <ul className="ml-4 mt-1 list-disc">
+            {related.map((report) => (
+              <li key={report.id}>
+                <Link className="underline" to={`/article/${report.id}`} onClick={onOpen}>{report.sourceName} · {report.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <LikeButton article={article} user={user} />
         {onPlay && (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`播报 ${article.title}`}>
-            <button type="button" onClick={() => onPlay(article, 'title')} className="news-listen">播报标题</button>
-            <button type="button" onClick={() => onPlay(article, 'full')} className="news-listen">播报全文</button>
-          </div>
+          <button type="button" onClick={() => onPlay(article)} aria-label={`收听 ${article.title}`} className="news-listen">收听</button>
         )}
       </div>
     </article>

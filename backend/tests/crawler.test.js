@@ -56,6 +56,30 @@ describe('Crawler', () => {
     expect(await crawlSource(source)).toEqual([]);
   });
 
+  it('preserves RSS images carried outside the article body without duplicating inline images', async () => {
+    addSource();
+    fetch.mockResolvedValueOnce(new Response(`
+      <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>Feed</title>
+        <item><title>Media RSS</title><link>https://example.org/news/1</link>
+          <description><![CDATA[<p>正文</p>]]></description>
+          <media:content medium="video" url="https://example.org/video.mp4" />
+          <media:thumbnail url="/photo.jpg?width=640&amp;height=480" />
+        </item>
+        <item><title>Inline</title><link>https://example.org/news/2</link>
+          <description><![CDATA[<img data-src="/inline.jpg">]]></description>
+          <enclosure type="image/jpeg" url="https://example.org/duplicate.jpg" />
+        </item>
+        <item><title>Enclosure</title><link>https://example.org/news/3</link>
+          <enclosure type="image/png" url="https://example.org/enclosed.png" />
+        </item>
+      </channel></rss>`));
+
+    const [media, inline, enclosure] = await crawlSource(getAllSources()[0]);
+    expect(media.content).toBe('<p><img src="https://example.org/photo.jpg?width=640&amp;height=480" alt=""></p><p>正文</p>');
+    expect(inline.content).toBe('<img data-src="/inline.jpg">');
+    expect(enclosure.content).toContain('https://example.org/enclosed.png');
+  });
+
   it('rolls back the whole batch if a later insert fails', () => {
     const sourceId = addSource();
     const article = { sourceId, title: 'Valid article', originalUrl: 'https://example.org/valid' };

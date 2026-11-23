@@ -1,25 +1,50 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { Link, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import NewsCard from './NewsCard.jsx';
 import SourceFilter from './SourceFilter.jsx';
 import HotSidebar from './HotSidebar.jsx';
+import NewsPagination from './NewsPagination.jsx';
+
+const scrollPositions = new Map();
+
+function groupReports(articles) {
+  const groups = new Map();
+  for (const article of articles) {
+    const title = article.title.normalize('NFKC').toLowerCase().replace(/[\p{P}\s]/gu, '');
+    const date = Date.parse(article.publishedAt);
+    const day = Math.floor((date + 8 * 3600000) / 86400000);
+    const key = title.length >= 12 && Number.isFinite(day) ? `${day}:${title}` : article.id;
+    const group = groups.get(key);
+    if (group) group.related.push(article);
+    else groups.set(key, { article, related: [] });
+  }
+  return [...groups.values()];
+}
 
 export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, defaultMode, user, isAdmin = false }) {
+  const [params, setParams] = useSearchParams();
+  const { key: locationKey } = useLocation();
+  const navigationType = useNavigationType();
+  const selectedChannel = params.get('category') || '';
+  const selectedSourceId = Number(params.get('source')) || undefined;
+  const requestedPage = Number(params.get('page'));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const date = params.get('date') || '';
+  const query = params.get('q') || '';
+  const [search, setSearch] = useState(query);
+  useEffect(() => setSearch(query), [query]);
   const [articles, setArticles] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [playMode, setPlayMode] = useState(null);
   const selectedMode = playMode ?? defaultMode;
   const [sources, setSources] = useState([]);
-  const [selectedSourceId, setSelectedSourceId] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [triggering, setTriggering] = useState(false);
 
   const [categories, setCategories] = useState([]);
   const [categoryError, setCategoryError] = useState(false);
-  const [selectedChannel, setSelectedChannel] = useState('');
-  const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const interests = user?.categories || [];
   const interestFilter = interests.join(',');
@@ -47,7 +72,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
     setLoading(true);
     setError('');
     api.getArticles({
-      page, limit: 20, view: 'card', sourceId: selectedSourceId,
+      page, limit: 20, view: 'card', sourceId: selectedSourceId, date, q: query,
       category: categoryFilter ? categoryFilter.split(',') : undefined
     }, { signal: controller.signal })
       .then((data) => {
@@ -62,21 +87,36 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, selectedSourceId, categoryFilter, refresh, user?.id]);
+  }, [page, selectedSourceId, categoryFilter, date, query, refresh, user?.id]);
+
+  useLayoutEffect(() => {
+    if (!loading && !error && navigationType === 'POP' && scrollPositions.has(locationKey)) {
+      const { id, top, scrollY } = scrollPositions.get(locationKey);
+      const card = document.getElementById(`news-story-${id}`);
+      window.scrollTo(0, card ? window.scrollY + card.getBoundingClientRect().top - top : scrollY);
+    }
+  }, [loading, error, navigationType, locationKey]);
+
+  const updateFilters = (updates) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries({ page: null, ...updates })) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setParams(next);
+  };
 
   const handleChannelChange = (next) => {
-    setSelectedChannel(next);
-    setSelectedSourceId(undefined);
-    setPage(1);
+    updateFilters({ category: next, source: null });
   };
 
   const handleSourceChange = (sourceId) => {
-    setSelectedSourceId(sourceId);
-    setPage(1);
+    updateFilters({ source: sourceId });
   };
 
   const handlePageChange = (nextPage) => {
-    setPage(nextPage);
+    if (page === nextPage) return;
+    updateFilters({ page: nextPage > 1 ? nextPage : null });
     window.scrollTo(0, 0);
   };
 
@@ -84,7 +124,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
     setTriggering(true);
     try {
       await api.triggerCrawl();
-      setPage(1);
+      updateFilters({});
       setRefresh((value) => value + 1);
     } catch (err) {
       setError(err.message || '抓取失败');
@@ -93,10 +133,13 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
     }
   };
 
-  const showHeadlines = !channel && pagination.page === 1 && !selectedSourceId && articles.length >= 4;
-  const [lead, ...briefs] = showHeadlines ? articles.slice(0, 4) : [];
-  const latest = showHeadlines ? articles.slice(4) : articles;
-  const renderStory = (article, variant) => (
+  const groups = groupReports(articles);
+  const filtered = channel || selectedSourceId || date || query;
+  const showHeadlines = !filtered && page === 1 && groups.length >= 4;
+  const [lead, ...briefs] = showHeadlines ? groups.slice(0, 4) : [];
+  const latest = showHeadlines ? groups.slice(4) : groups;
+  const queue = groups.map(({ article }) => article);
+  const renderStory = ({ article, related }, variant) => (
     <NewsCard
       key={article.id}
       article={article}
@@ -105,6 +148,13 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
       isActive={activeArticleId === article.id}
       variant={variant}
       onPlay={onPlaySingle}
+      related={related}
+      onOpen={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const card = event.currentTarget.closest('article');
+        scrollPositions.set(locationKey, { id: article.id, top: card.getBoundingClientRect().top, scrollY: window.scrollY });
+        if (scrollPositions.size > 50) scrollPositions.delete(scrollPositions.keys().next().value);
+      }}
     />
   );
 
@@ -131,24 +181,50 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
       </section>
       <div aria-busy={loading}>
         <header className="news-section-header">
-          <h1>{channel === 'interests' ? '我的兴趣' : channelLabel || (showHeadlines ? '头条新闻' : '新闻快讯')}</h1>
+          <h1>{channel === 'interests' ? '我的兴趣' : channelLabel || (showHeadlines ? '最新更新' : '新闻快讯')}</h1>
           <div className="news-toolbar">
-            <SourceFilter sources={sourceOptions} selectedId={selectedSourceId} onChange={handleSourceChange} />
-            <select aria-label="全部播报范围" value={selectedMode} className="news-action"
+            <select aria-label="本页播报内容" value={selectedMode} className="news-action"
               onChange={event => setPlayMode(event.target.value)}>
               <option value="title">仅标题</option>
               <option value="summary">标题和摘要</option>
               <option value="full">全文</option>
             </select>
             <button
-              onClick={() => onPlayAll?.(articles, selectedMode)}
+              onClick={() => onPlayAll?.(queue, selectedMode)}
               disabled={loading || !!error || articles.length === 0}
               className="news-primary"
             >
-              <span aria-hidden="true">▶</span> 全部播报
+              <span aria-hidden="true">▶</span> 播报本页{!loading && !error && queue.length > 0 ? ` · ${queue.length} 条` : ''}
             </button>
           </div>
         </header>
+        <form className="news-filters" aria-label="查找新闻" onSubmit={(event) => {
+          event.preventDefault();
+          updateFilters({ q: search.trim() });
+        }}>
+          <div className="news-filter-field news-filter-search">
+            <label htmlFor="news-keyword">搜索新闻</label>
+            <div>
+              <input id="news-keyword" type="search" className="news-action" placeholder="输入人物、事件或关键词" maxLength={100}
+                value={search} onChange={(event) => setSearch(event.target.value)} />
+              <button type="submit" className="news-action">搜索</button>
+            </div>
+          </div>
+          <label className="news-filter-field">
+            发布日期（北京时间）
+            <input type="date" className="news-action" value={date}
+              onChange={(event) => updateFilters({ date: event.target.value })} />
+          </label>
+          <div className="news-filter-field">
+            <span>新闻来源</span>
+            <SourceFilter sources={sourceOptions} selectedId={selectedSourceId} onChange={handleSourceChange} />
+          </div>
+          {filtered && <button type="button" className="news-action" onClick={() => {
+            setSearch('');
+            setParams({});
+          }}>清除筛选</button>}
+        </form>
+        {filtered && !loading && !error && <p className="news-result-count" role="status">找到 {pagination.total} 篇报道</p>}
 
         {loading ? (
           <div className="news-message" role="status">加载中…</div>
@@ -159,7 +235,8 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
           </div>
         ) : articles.length === 0 ? (
           <div className="news-message">
-            <p>{selectedSourceId ? '该来源暂无新闻' : channel ? '该分类暂无新闻' : '暂无新闻，请等待首次抓取完成'}</p>
+            <p>{filtered ? '没有符合条件的新闻，请调整筛选' : '暂无新闻，请等待首次抓取完成'}</p>
+            {page > 1 && <button type="button" className="news-listen" onClick={() => handlePageChange(1)}>返回第 1 页</button>}
             {isAdmin && (
               <button onClick={handleTriggerCrawl} disabled={triggering} className="news-primary mt-4">
                 {triggering ? '抓取中…' : '立即抓取'}
@@ -172,7 +249,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
               <div className="news-headlines">
                 <section aria-label="首条新闻">{renderStory(lead, 'lead')}</section>
                 <section className="news-briefs" aria-labelledby="more-headlines">
-                  <h2 id="more-headlines">更多头条</h2>
+                  <h2 id="more-headlines">更多新闻</h2>
                   {briefs.map((article) => renderStory(article, 'brief'))}
                 </section>
               </div>
@@ -185,17 +262,7 @@ export default function NewsList({ activeArticleId, onPlaySingle, onPlayAll, def
               </section>
             )}
 
-            {pagination.totalPages > 1 && (
-              <nav className="news-pagination" aria-label="新闻分页">
-                <button className="news-listen" onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page <= 1}>
-                  上一页
-                </button>
-                <span>{pagination.page} / {pagination.totalPages}</span>
-                <button className="news-listen" onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}>
-                  下一页
-                </button>
-              </nav>
-            )}
+            <NewsPagination key={pagination.page} {...pagination} onChange={handlePageChange} />
           </>
         )}
       </div>
