@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { listArticles, getArticleById, listRecentArticles, listHotArticles } from '../models/article.js';
-import { verifyToken } from '../middleware/auth.js';
+import { generateAnalysis, listAnalyses, listAnalysisModels } from '../services/xinwenlianbo/analysis.js';
+import { authMiddleware, adminMiddleware, verifyToken } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -68,6 +69,31 @@ router.get('/hot-sidebar', (req, res, next) => {
     const { items } = listHotArticles({ range: req.query.range, page: 1, limit: 5, cards, includeTotal: false });
     res.sendJson(0, 'success', { items });
   } catch (err) { next(err); }
+});
+
+router.get('/:id/investment-analyses', (req, res, next) => {
+  try {
+    res.sendJson(0, 'success', listAnalyses(positiveInteger(req.params.id, 0)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/investment-analyses', authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const result = await generateAnalysis(positiveInteger(req.params.id, 0), req.body?.modelId);
+    res.sendJson(0, '分析已保存', result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/investment-analysis-models', authMiddleware, adminMiddleware, (req, res, next) => {
+  try {
+    res.sendJson(0, 'success', listAnalysisModels());
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/:id', (req, res, next) => {

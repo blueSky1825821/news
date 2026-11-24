@@ -41,6 +41,21 @@ export const api = {
     return request('/api/articles/' + id + '?includeLikes=1', options);
   },
 
+  getInvestmentAnalyses(id, options = {}) {
+    return request(`/api/articles/${id}/investment-analyses`, options);
+  },
+
+  getInvestmentAnalysisModels(options = {}) {
+    return request('/api/articles/investment-analysis-models', options);
+  },
+
+  generateInvestmentAnalysis(id, modelId) {
+    return request(`/api/articles/${id}/investment-analyses`, {
+      method: 'POST',
+      body: JSON.stringify({ modelId })
+    });
+  },
+
   getTodayArticles(params = {}, options = {}) {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));

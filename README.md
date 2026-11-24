@@ -157,6 +157,10 @@ npm run deploy -- --reinstall
 
 每天北京时间 19:00 起每分钟检查央视网栏目页，仅读取当天第一个《新闻联播》完整版的「内容简介」。简介发布后原样保存为当日主要内容，附完整版原文链接。保存成功后当天停止请求；若午夜前仍未发布，次日按新日期开始。管理员也可以手动抓取。
 
+每期详情页的「投资分析」根据保存的节目文字生成专业投研简报，覆盖政策与产业传导、跨资产影响、情景触发条件和待验证指标。管理员可以为历史或当日节目选择模型生成。同一期可保存每个模型的最新报告，访客也可查看。新闻文字更新后，对应报告需要重新生成。
+
+在 `backend/.env` 中设置 `DEEPSEEK_API_KEY` 并重启后端，即可使用 DeepSeek Flash 和 V4 Pro。通过 `XINWENLIANBO_LLM_MODELS` 可加入其他兼容 OpenAI Chat Completions 的模型。填写 `XINWENLIANBO_AUTO_ANALYSIS_MODEL` 可在采集完成后自动分析，示例见 [后端配置模板](backend/.env.example)。生成时会将节目文字发给所选模型服务，分析仅使用采集的节目材料。
+
 后端会将 `frontend/dist` 作为静态文件挂载到 `/news` 提供服务，并支持前端路由 fallback。访问 `http://localhost:3000/news/` 即可使用。
 
 ### 外网访问

@@ -1,25 +1,22 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import '../backend/src/config.js';
+import { getWechatBrowserExecutable } from '../backend/src/services/wechatBrowser.js';
 
-const systemChrome = '/usr/bin/google-chrome';
-const executable = process.env.WECHAT_BROWSER_EXECUTABLE ||
-  (existsSync(systemChrome) ? systemChrome : undefined);
-
-if (executable) {
-  try {
-    accessSync(executable, constants.X_OK);
+try {
+  const executable = getWechatBrowserExecutable();
+  if (executable) {
     console.log(`  WeChat browser ready: ${executable}`);
-  } catch (error) {
-    console.error(`  Cannot use WeChat browser: ${error.message}`);
-    process.exitCode = 1;
+  } else {
+    const cli = fileURLToPath(new URL('../backend/node_modules/playwright/cli.js', import.meta.url));
+    const result = spawnSync(process.execPath, [cli, 'install', '--only-shell', 'chromium'], {
+      cwd: fileURLToPath(new URL('../backend/', import.meta.url)),
+      stdio: 'inherit',
+    });
+    if (result.error) throw result.error;
+    process.exitCode = result.status ?? 1;
   }
-} else {
-  const cli = resolve('node_modules', 'playwright', 'cli.js');
-  const result = spawnSync(process.execPath, [cli, 'install', 'chromium'], {
-    stdio: 'inherit',
-  });
-  if (result.error) console.error(result.error.message);
-  process.exitCode = result.status ?? 1;
+} catch (error) {
+  console.error(`  Cannot prepare WeChat browser: ${error.message}`);
+  process.exitCode = 1;
 }

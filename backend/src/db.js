@@ -60,6 +60,16 @@ export function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_articles_published_datetime ON articles(datetime(publishedAt));
     CREATE INDEX IF NOT EXISTS idx_articles_fetched_datetime ON articles(datetime(fetchedAt));
 
+    CREATE TABLE IF NOT EXISTS xinwenlianbo_analyses (
+      articleId INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      modelId TEXT NOT NULL,
+      modelLabel TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      content TEXT NOT NULL,
+      generatedAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (articleId, modelId)
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT,

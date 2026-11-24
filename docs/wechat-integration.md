@@ -22,7 +22,7 @@ JWT_SECRET=你的随机密钥
 
 ## 扫码后自动发表图文
 
-使用运行后端的系统账号执行 `bash scripts/deploy.sh` 或 `.\scripts\deploy.ps1`。部署脚本会优先使用 `WECHAT_BROWSER_EXECUTABLE` 指定的浏览器，其次使用现有的 `/usr/bin/google-chrome`，否则通过 Playwright 安装 Chromium。可在 `backend/.env` 中将 `WECHAT_BROWSER_EXECUTABLE` 配置为浏览器的绝对路径。服务器需能访问微信公众平台，并具备 Chromium 运行所需的系统依赖和中文字体。
+使用运行后端的系统账号执行 `bash scripts/deploy.sh` 或 `.\scripts\deploy.ps1`。部署脚本会优先使用 `WECHAT_BROWSER_EXECUTABLE` 指定的浏览器，其次检查系统常见安装位置的 Google Chrome（Linux 的 `/usr/bin/google-chrome` 和 Windows 的标准安装目录）。如果找不到 Chrome，Playwright 会复用匹配版本的缓存，首次安装时只下载 Chromium Headless Shell 和所需组件。可在 `backend/.env` 中将 `WECHAT_BROWSER_EXECUTABLE` 配置为浏览器的绝对路径。服务器需能访问微信公众平台，并具备 Chromium 运行所需的系统依赖和中文字体。
 
 以管理员身份进入“公众号后台”，选稿后点击“自动发表到公众号”，系统会生成固定列表并开始发表。已生成内容时会沿用当前列表。首次登录或会话失效时，页面会弹出二维码。请用有目标公众号管理权限的微信扫码，在手机上确认并选定要发表的公众号。微信提示登录二维码过期时，程序会尝试刷新。服务端保存对应管理员的浏览器会话，随后填写选稿标题、新闻标题列表和自动生成的封面，再提交发表。如果微信另行要求发表核验，页面会显示新的二维码。
 

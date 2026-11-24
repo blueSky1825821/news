@@ -1,10 +1,10 @@
-import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { setTimeout as pause } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { getDb } from '../db.js';
 import { getPush } from './wechat.js';
+import { getWechatBrowserExecutable } from './wechatBrowser.js';
 
 const origin = 'https://mp.weixin.qq.com';
 const scanTimeout = 180_000;
@@ -228,8 +228,7 @@ async function runPublication(job, push, userId) {
   let browser;
   let failure = '无法启动发表浏览器。请检查服务器上的 Chromium 安装。';
   try {
-    const systemChrome = '/usr/bin/google-chrome';
-    const executablePath = process.env.WECHAT_BROWSER_EXECUTABLE || (existsSync(systemChrome) ? systemChrome : undefined);
+    const executablePath = getWechatBrowserExecutable();
     browser = await chromium.launch({ executablePath, chromiumSandbox: true });
     failure = '无法读取或保存登录会话，或微信登录页暂时不可用。';
     const dir = join(dirname(getDb().location() || ''), 'wechat-browser');

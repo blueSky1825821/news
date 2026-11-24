@@ -5,6 +5,7 @@ import { api } from '../services/api.js';
 import { readNewsHeadlines } from '../services/newsHeadlines.js';
 import LikeButton from './LikeButton.jsx';
 import CommentSection from './CommentSection.jsx';
+import InvestmentAnalysis from './InvestmentAnalysis.jsx';
 
 export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSendEnabled = false }) {
   const { id } = useParams();
@@ -194,6 +195,10 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
             {article.transcript}
           </div>
         </details>
+      )}
+
+      {article.category === 'xinwenlianbo' && (
+        <InvestmentAnalysis key={article.id} articleId={article.id} isAdmin={isAdmin} />
       )}
 
       <div className="mt-6 flex items-center gap-4">

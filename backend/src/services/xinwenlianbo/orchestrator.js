@@ -1,5 +1,6 @@
 import { logConsole } from '../../utils/logger.js';
 import { getSetting } from '../../models/settings.js';
+import { runAutomaticAnalysis } from './analysis.js';
 import { collectCctvNews } from './cctv.js';
 import {
   findTaskByDate, findTaskById, hasPublishedIntroduction, findBroadcastSource,
@@ -102,6 +103,9 @@ async function processCctvNews(date, sourceId) {
     beginStep('publish-introduction');
     const result = publishIntroduction(date, sourceId, news);
     logConsole('log', '[Xinwenlianbo] Task completed', { date, articleId: result.articleId, ...currentProgress() });
+    runAutomaticAnalysis(result.articleId).catch(err => {
+      logConsole('error', '[Xinwenlianbo] Automatic analysis failed', { date, articleId: result.articleId, message: err.message });
+    });
     return result;
   } catch (err) {
     const progress = currentProgress();
