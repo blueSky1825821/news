@@ -10,6 +10,7 @@ const origin = 'https://mp.weixin.qq.com';
 const scanTimeout = 180_000;
 const dialogs = '.weui-desktop-dialog:visible, [role="dialog"]:visible';
 const qrImage = 'img[src*="qrcode"], img[src*="scanlogin"], canvas';
+const newsSourceLabel = /^素材来源\s*官方媒体\s*[\/／]\s*网络新闻$/;
 let activeJob;
 
 function httpError(message, statusCode) {
@@ -131,6 +132,53 @@ async function prepareArticle(context, page, push, token) {
   await visible(page, '.js_cover_preview_new, .js_cover_preview_square').waitFor();
 }
 
+async function setNewsSource(page) {
+  const option = page.getByText(newsSourceLabel).filter({ visible: true }).first();
+  if (!await option.isVisible()) {
+    await page.getByText(/^(选择声明类型|创作来源|添加声明)$/)
+      .filter({ visible: true }).first().click();
+  }
+  const dialog = page.locator(dialogs).filter({ hasText: /声明类型|创作来源|素材来源/ }).first();
+  const source = dialog.getByText(newsSourceLabel).filter({ visible: true }).first();
+  await option.waitFor();
+  if (await source.isVisible()) {
+    await source.click();
+    await button(dialog, /^\s*(确定|确认|完成|保存)\s*$/).click();
+    await dialog.waitFor({ state: 'hidden' });
+  } else {
+    await option.click();
+  }
+  await option.waitFor();
+}
+
+async function markOriginal(page) {
+  const declared = page.getByText(/^已声明原创$|^已声明$/).filter({ visible: true }).first();
+  const declaredArea = visible(page, '#js_original_open');
+  if (await declared.isVisible() || await declaredArea.isVisible()) return;
+
+  const toggle = visible(page, '.js_edit_ori').or(
+    page.getByText(/^(标记为原创|声明原创)$/).filter({ visible: true }).first()
+  ).first();
+  await toggle.click();
+  const dialog = page.locator(dialogs).filter({ hasText: /原创/ }).first();
+  const editDeclaration = page.getByText('编辑声明', { exact: true }).filter({ visible: true }).first();
+  await dialog.or(editDeclaration).first().waitFor();
+  if (!await dialog.isVisible()) await editDeclaration.click();
+  const author = visible(dialog, 'input.js_author, input[placeholder*="作者"]');
+  if (await author.isVisible() && !await author.inputValue()) {
+    await author.fill('新闻简报');
+  }
+  const agreement = dialog.locator('label, .weui-desktop-form__checkbox-wrp')
+    .filter({ hasText: /我已阅读|我同意/ }).filter({ visible: true }).first();
+  if (await agreement.isVisible()) {
+    const checkbox = agreement.locator('input[type="checkbox"]').first();
+    if (!await checkbox.count() || !await checkbox.isChecked()) await agreement.click();
+  }
+  await button(dialog, /^\s*(确定|确认|完成|声明原创)\s*$/).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await declared.or(declaredArea).first().waitFor();
+}
+
 async function publish(page, job, id) {
   if (new URL(page.url()).origin !== origin) throw new Error('微信编辑器地址已变化。');
   const publishButton = button(page, /^\s*发表\s*$/);
@@ -209,6 +257,10 @@ async function runPublication(job, push, userId) {
     }
     failure = '微信图文编辑器未能填入标题、正文或封面，请核对账号的图文发表权限。';
     await prepareArticle(context, page, push, token);
+    failure = '未能设置创作来源为「素材来源官方媒体 / 网络新闻」，发表已停止。';
+    await setNewsSource(page);
+    failure = '未能完成微信原创声明，发表已停止。';
+    await markOriginal(page);
     failure = '未能确认发表结果，请到微信公众平台核对。';
     await publish(page, job, push.id);
     job.qr = null;
