@@ -30,7 +30,7 @@ Write-Log "  AI News Broadcasting - Deploy" -ForegroundColor Green
 Write-Log "============================================" -ForegroundColor Green
 
 # Step 1: Build frontend
-Write-Step "1/4 Building frontend..."
+Write-Step "1/5 Building frontend..."
 Set-Location "$rootDir\frontend"
 try {
     node $dependencyScript "$rootDir\frontend" @dependencyFlags
@@ -44,7 +44,7 @@ try {
 }
 
 # Step 2: Install backend dependencies
-Write-Step "2/4 Checking backend dependencies..."
+Write-Step "2/5 Checking backend dependencies..."
 Set-Location "$rootDir\backend"
 try {
     node $dependencyScript "$rootDir\backend" --production @dependencyFlags
@@ -55,8 +55,17 @@ try {
     exit 1
 }
 
-# Step 3: Verify dist exists
-Write-Step "3/4 Verifying build output..."
+# Step 3: Prepare the WeChat publishing browser
+Write-Step "3/5 Preparing WeChat browser..."
+$env:NODE_ENV = "production"
+node (Join-Path $PSScriptRoot "ensure-wechat-browser.mjs")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "WeChat browser setup failed (exit $LASTEXITCODE)"
+    exit 1
+}
+
+# Step 4: Verify dist exists
+Write-Step "4/5 Verifying build output..."
 $distPath = "$rootDir\frontend\dist"
 if (-not (Test-Path "$distPath\index.html")) {
     Write-Error "Build output not found at $distPath\index.html"
@@ -64,9 +73,8 @@ if (-not (Test-Path "$distPath\index.html")) {
 }
 Write-Success "Build output verified"
 
-# Step 4: Start server
-Write-Step "4/4 Starting server..."
-$env:NODE_ENV = "production"
+# Step 5: Start server
+Write-Step "5/5 Starting server..."
 Write-Log "`nServer starting on http://0.0.0.0:3000" -ForegroundColor Yellow
 Write-Log "Access via: http://<your-ip>:3000" -ForegroundColor Yellow
 Write-Log "Press Ctrl+C to stop`n" -ForegroundColor Gray

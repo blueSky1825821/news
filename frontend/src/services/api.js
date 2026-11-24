@@ -138,6 +138,14 @@ export const api = {
     return request('/api/wechat/pushes', { method: 'POST', body: JSON.stringify({ articleIds }) });
   },
 
+  startWechatPublication(id) {
+    return request(`/api/wechat/pushes/${id}/publication`, { method: 'POST' });
+  },
+
+  getWechatPublication(id) {
+    return request(`/api/wechat/pushes/${id}/publication`, { cache: 'no-store' });
+  },
+
   sendWechatPush(id, preview = false) {
     return request(`/api/wechat/pushes/${id}/send`, { method: 'POST', body: JSON.stringify({ preview, confirm: !preview }) });
   },

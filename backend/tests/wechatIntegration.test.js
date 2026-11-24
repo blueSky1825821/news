@@ -96,7 +96,7 @@ describe('WeChat OAuth and publishing', () => {
     const user = findOrCreateWechatUser('wx123', 'ordinary');
     const userToken = `Bearer ${generateToken({ userId: user.id })}`;
     for (const prefix of ['/api/wechat', '/news/api/wechat']) {
-      for (const [method, path] of [['get', '/settings'], ['put', '/settings'], ['post', '/flag'], ['get', '/flags'], ['get', '/preview-content'], ['post', '/preview'], ['get', '/logs'], ['post', '/pushes'], ['post', '/pushes/id/send']]) {
+      for (const [method, path] of [['get', '/settings'], ['put', '/settings'], ['post', '/flag'], ['get', '/flags'], ['get', '/preview-content'], ['post', '/preview'], ['get', '/logs'], ['post', '/pushes'], ['post', '/pushes/id/send'], ['get', '/pushes/id/publication'], ['post', '/pushes/id/publication']]) {
         expect((await request(app)[method](prefix + path)).status).toBe(401);
         expect((await request(app)[method](prefix + path).set('Authorization', userToken)).status).toBe(403);
       }
@@ -107,6 +107,17 @@ describe('WeChat OAuth and publishing', () => {
     for (const key of ['appSecret', 'accessToken', 'tokenExpiresAt']) expect(settings.body.data[key]).toBeUndefined();
     const invalid = await request(app).put('/api/wechat/settings').set('Authorization', auth).send({ summaryPushCron: 'invalid' });
     expect(invalid.status).toBe(400);
+  });
+  it('preserves an uncertain browser publication without relaunching or resubmitting it', async () => {
+    const auth = await admin();
+    const draft = createPush([{ id: 1, title: '新闻' }]);
+    const endpoint = `/api/wechat/pushes/${draft.id}/publication`;
+    const idle = await request(app).get(endpoint).set('Authorization', auth);
+    expect(idle.body.data.status).toBe('idle');
+    getDb().prepare("INSERT INTO wechat_publications (pushId, status) VALUES (?, 'unknown')").run(draft.id);
+    const result = await request(app).post(endpoint).set('Authorization', auth);
+    expect(result.headers['cache-control']).toBe('no-store');
+    expect(result.body.data).toEqual({ status: 'unknown' });
   });
   it('creates fixed single and multi-article lists, previews and sends the exact reviewed text once', async () => {
     articles();

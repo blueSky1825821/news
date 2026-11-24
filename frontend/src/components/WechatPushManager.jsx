@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api.js';
 import WechatPublication from './WechatPublication.jsx';
+import WechatAutoPublish from './WechatAutoPublish.jsx';
 
 export default function WechatPushManager({ massSendEnabled = false }) {
   const [articles, setArticles] = useState([]);
@@ -50,10 +51,15 @@ export default function WechatPushManager({ massSendEnabled = false }) {
     setError('');
     setMessage('');
     try {
-      setDraft(await api.createWechatPush(selected));
+      const result = await api.createWechatPush(selected);
+      setDraft(result);
       setConfirmed(false);
       setSubmitted(false);
-    } catch (err) { setError(err.message); }
+      return result;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    }
     finally { setBusy(false); }
   }
   async function send(preview) {
@@ -103,6 +109,7 @@ export default function WechatPushManager({ massSendEnabled = false }) {
       <button onClick={() => send(false)} disabled={busy || !confirmed || submitted} className="rounded bg-green-700 px-4 py-2 text-white disabled:opacity-50">{submitted ? '已提交，请核对记录' : '立即群发'}</button>
       </>}
     </div>}
+    <WechatAutoPublish pushId={draft?.id} prepare={selected.length ? prepare : null} disabled={busy} />
     {message && <p role="status" className="text-sm text-green-700">{message}</p>}
     {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     <h3 className="font-semibold">最近推送记录</h3>

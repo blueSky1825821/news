@@ -147,6 +147,11 @@ export function initSchema(db) {
       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS wechat_publications (
+      pushId TEXT PRIMARY KEY REFERENCES news_pushes(id),
+      status TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS xinwenlianbo_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       taskDate TEXT NOT NULL UNIQUE,
