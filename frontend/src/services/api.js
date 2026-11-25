@@ -13,6 +13,18 @@ async function request(url, options = {}) {
     }
   });
 
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const wrongEndpoint = res.ok || res.status === 404;
+    const message = wrongEndpoint
+      ? `接口 ${url} 未返回 JSON，请确认前后端已同步部署，且代理将 /news/api 请求转发至后端。`
+      : `接口请求失败（HTTP ${res.status}）。`;
+    const err = new Error(message);
+    err.status = res.status;
+    err.endpointUnavailable = wrongEndpoint;
+    throw err;
+  }
+
   const json = await res.json();
   if (json.code !== 0) {
     const err = new Error(json.message || 'Request failed');
@@ -157,16 +169,16 @@ export const api = {
     return request('/api/wechat/browser-login', { method: 'POST' });
   },
 
-  getWechatBrowserLogin() {
-    return request('/api/wechat/browser-login', { cache: 'no-store' });
+  getWechatBrowserLogin({ signal } = {}) {
+    return request('/api/wechat/browser-login', { cache: 'no-store', signal });
   },
 
   startWechatPublication(id) {
     return request(`/api/wechat/pushes/${id}/publication`, { method: 'POST' });
   },
 
-  getWechatPublication(id) {
-    return request(`/api/wechat/pushes/${id}/publication`, { cache: 'no-store' });
+  getWechatPublication(id, { signal } = {}) {
+    return request(`/api/wechat/pushes/${id}/publication`, { cache: 'no-store', signal });
   },
 
   sendWechatPush(id, preview = false) {

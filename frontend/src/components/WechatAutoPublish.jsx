@@ -29,12 +29,15 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
 
   useEffect(() => {
     if (!running || starting) return;
-    let disposed = false;
+    const controller = new AbortController();
+    const { signal } = controller;
     let timer;
     async function poll() {
       try {
-        const status = await (loginOnly ? api.getWechatBrowserLogin() : api.getWechatPublication(jobId));
-        if (disposed) return;
+        const status = await (loginOnly
+          ? api.getWechatBrowserLogin({ signal })
+          : api.getWechatPublication(jobId, { signal }));
+        if (signal.aborted) return;
         setJob(status);
         setError('');
         if (!pending.includes(status.status)) {
@@ -42,10 +45,12 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
           return;
         }
       } catch (err) {
-        if (disposed) return;
-        if ([401, 403, 404].includes(err.status)) {
+        if (signal.aborted) return;
+        if (err.endpointUnavailable || [401, 403, 404].includes(err.status)) {
           sessionStorage.removeItem(operationKey);
-          setJob({ status: 'idle', message: err.message });
+          setJob(null);
+          setJobId(null);
+          setError(err.message);
           return;
         }
         setError(`获取任务状态失败，正在重试。${err.message}`);
@@ -54,7 +59,7 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
     }
     poll();
     return () => {
-      disposed = true;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [jobId, running, starting, loginOnly, operationKey]);
@@ -79,7 +84,7 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
       if (!pending.includes(result.status)) sessionStorage.removeItem(operationKey);
       setJob(result);
     } catch (err) {
-      if (err.status >= 400 && err.status < 500) {
+      if (err.endpointUnavailable || (err.status >= 400 && err.status < 500)) {
         sessionStorage.removeItem(operationKey);
         setJob(null);
         setJobId(null);
@@ -95,19 +100,20 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
     : loginOnly && job?.status === 'idle'
       ? '登录任务已中断，请重新扫码。'
       : messages[job?.status || 'starting'];
+  const taskMessage = job?.message || statusMessage;
   const alreadySubmitted = jobId === pushId && ['published', 'unknown'].includes(job?.status);
   return <div className="space-y-2">
     {(loginOnly || pushId || prepare) && <button type="button" onClick={start} disabled={disabled || starting || running || alreadySubmitted}
       className="rounded bg-green-700 px-4 py-2 text-sm text-white disabled:opacity-50">{loginOnly ? '扫码登录公众号' : '自动发表到公众号'}</button>}
     {(job || starting || running) && <p role="status" className="text-sm text-gray-700">
-      {starting ? messages.starting : job?.message || statusMessage}
+      {starting ? messages.starting : taskMessage}
     </p>}
     {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     <dialog ref={dialog} onCancel={event => event.preventDefault()} aria-labelledby={dialogTitle}
       className="w-[min(90vw,400px)] rounded-lg p-6 text-center backdrop:bg-black/50">
       <h3 id={dialogTitle} className="font-semibold">{job?.status === 'publish_scan' ? '微信发表核验' : '登录微信公众平台'}</h3>
       {job?.qr && <img src={job.qr} alt="微信扫码二维码" className="mx-auto my-3 max-w-full" />}
-      <p role="status" className="text-sm text-gray-700">{job?.message || statusMessage}</p>
+      {scanning && <p role="status" className="text-sm text-gray-700">{taskMessage}</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </dialog>
   </div>;

@@ -48,6 +48,10 @@ for (const [route, router] of apiRoutes) {
   app.use(['/api' + route, '/news/api' + route], router);
 }
 
+app.use(['/api', '/news/api'], (req, res) => {
+  res.status(404).sendJson(404, 'API endpoint not found');
+});
+
 // Serve uploaded files
 const uploadsPath = path.join(__dirname, '../public/uploads');
 app.use('/uploads', express.static(uploadsPath));

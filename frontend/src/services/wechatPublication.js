@@ -1,3 +1,5 @@
+import { formatHeadlineLines, moreNewsText, moreNewsUrl } from '../../../shared/wechatPublication.js';
+
 const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 function escapeHtml(value) {
@@ -14,13 +16,14 @@ export function publicationUrl(value) {
 }
 
 export function formatWechatPublication({ articles }) {
-  const headlines = articles.map(article => article.title?.trim()).filter(Boolean);
-  const lines = headlines.map((title, index) => headlines.length > 1 ? `${index + 1}. ${title}` : title);
+  const lines = formatHeadlineLines(articles);
+  const paragraphs = lines.map(line => (
+    `<p style="margin:0 0 10px;font-size:16px;line-height:1.7;">${escapeHtml(line)}</p>`
+  )).join('');
+  const more = `<p style="margin:16px 0 0;"><a href="${moreNewsUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(moreNewsText)}</a></p>`;
   return {
-    html: `<section style="font-family:system-ui,sans-serif;color:#172b43;word-break:break-word;">${lines.map(line =>
-      `<p style="margin:0 0 10px;font-size:16px;line-height:1.7;">${escapeHtml(line)}</p>`
-    ).join('')}</section>`,
-    text: lines.join('\n')
+    html: `<section style="font-family:system-ui,sans-serif;color:#172b43;word-break:break-word;">${paragraphs}${more}</section>`,
+    text: [...lines, moreNewsText].join('\n')
   };
 }
 

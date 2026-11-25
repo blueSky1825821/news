@@ -55,6 +55,22 @@ log_message "Access via: http://<your-ip>:3000"
 log_format "Logs: %s" "$ROOT_DIR/scripts/deploy.log"
 log_format "Stop: bash %s" "$SCRIPT_DIR/stop.sh"
 cd "$ROOT_DIR/backend"
-nohup node src/server.js > "$ROOT_DIR/scripts/deploy.log" 2>&1 &
-echo $! > "$ROOT_DIR/scripts/server.pid"
-log_format "Server started in background. PID: %s" "$!"
+DEPLOY_LOG="$ROOT_DIR/scripts/deploy.log"
+nohup node src/server.js > "$DEPLOY_LOG" 2>&1 &
+SERVER_PID=$!
+echo "$SERVER_PID" > "$SCRIPT_DIR/server.pid"
+
+for ((attempt = 0; attempt < 60; attempt++)); do
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        log_format "Server failed to start. Check %s" "$DEPLOY_LOG" >&2
+        exit 1
+    fi
+    if grep -Fq 'Server running on http://' "$DEPLOY_LOG"; then
+        log_format "Server started in background. PID: %s" "$SERVER_PID"
+        exit 0
+    fi
+    sleep 0.5
+done
+
+log_format "Server did not confirm startup. Check %s" "$DEPLOY_LOG" >&2
+exit 1

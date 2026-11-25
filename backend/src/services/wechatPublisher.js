@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { setTimeout as pause } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { formatHeadlineLines, moreNewsText, moreNewsUrl } from '../../../shared/wechatPublication.js';
 import { getDb } from '../db.js';
 import { getPush } from './wechat.js';
 import { getWechatBrowserExecutable } from './wechatBrowser.js';
@@ -106,16 +107,26 @@ async function prepareArticle(context, page, push, token, broadcast) {
   const title = Array.from(push.title.trim()).slice(0, 64).join('');
   const titleField = visible(page, 'textarea#title, .title-editor__input [contenteditable="true"], #js_title_main [contenteditable="true"]');
   await titleField.fill(title);
-  const body = broadcast?.summary?.trim() || push.articles.map(({ title }, i) => push.articles.length === 1 ? title : `${i + 1}. ${title}`).join('\n');
+  const summary = broadcast?.summary?.trim();
+  const lines = summary ? summary.split('\n') : formatHeadlineLines(push.articles);
   const editor = visible(page, '#ueditor_0 .ProseMirror, .rich_media_content.ProseMirror, #js_ueditor .ProseMirror, iframe[id^="ueditor"]');
   const field = await editor.evaluate(node => node.tagName) === 'IFRAME'
     ? editor.contentFrame().locator('body[contenteditable="true"]')
     : editor;
   await field.click();
-  for (const [index, line] of body.split('\n').entries()) {
+  for (const [index, line] of lines.entries()) {
     if (index) await page.keyboard.press('Enter');
     await page.keyboard.insertText(line);
   }
+  await page.keyboard.press('Enter');
+  const inserted = await field.evaluate((element, { text, url }) => {
+    const link = element.ownerDocument.createElement('a');
+    link.href = url;
+    link.textContent = text;
+    element.ownerDocument.execCommand('insertHTML', false, link.outerHTML);
+    return element.textContent.includes(text);
+  }, { text: moreNewsText, url: moreNewsUrl });
+  if (!inserted) await page.keyboard.insertText(moreNewsText);
 
   const cover = await makeCover(context, title);
   await field.click();

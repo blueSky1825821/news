@@ -78,7 +78,7 @@ export default function WechatPushManager({ massSendEnabled = false }) {
   }
   return <section className="mt-8 space-y-4 rounded-lg border bg-white p-6">
     <h2 className="text-lg font-semibold">{massSendEnabled ? '主动推送新闻' : '生成公众号发布内容'}</h2>
-    <p className="text-sm text-gray-600">选择 1 篇生成单条新闻，选择多篇生成固定新闻列表。{massSendEnabled ? '通过公众号接口发送标题和平台链接，实际发送受接口权限与额度限制。' : '生成后可复制只含新闻标题的正文。'}</p>
+    <p className="text-sm text-gray-600">选择 1 篇生成单条新闻，选择多篇生成固定新闻列表。{massSendEnabled ? '通过公众号接口发送标题和平台链接，实际发送受接口权限与额度限制。' : '生成后可预览正文并自动发表到公众号。'}</p>
     <button onClick={load} disabled={busy} className="rounded bg-gray-100 px-3 py-2 text-sm">刷新新闻与记录</button>
     {categories.length > 0 && (
       <div role="group" aria-label="新闻标签筛选" className="flex flex-wrap gap-2">
@@ -100,16 +100,16 @@ export default function WechatPushManager({ massSendEnabled = false }) {
     </div>
     {!articles.length && <p className="text-gray-500">暂无新闻，请先抓取来源。</p>}
     <button onClick={prepare} disabled={busy || !selected.length} className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50">生成内容与列表链接</button>
-    {draft && <div className="space-y-3 rounded bg-gray-50 p-4">
-      <WechatPublication key={draft.id} title={draft.title} articles={draft.topArticles}
-        url={draft.url} />
-      {massSendEnabled && <>
+    <div className={draft ? 'space-y-3 rounded bg-gray-50 p-4' : undefined}>
+      {draft && <WechatPublication key={draft.id} title={draft.title} articles={draft.topArticles}
+        url={draft.url} />}
+      <WechatAutoPublish pushId={draft?.id} disabled={busy} />
+      {draft && massSendEnabled && <>
       <button onClick={() => send(true)} disabled={busy} className="rounded bg-gray-200 px-4 py-2 disabled:opacity-50">发送给预览 OpenID</button>
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={confirmed} disabled={busy || submitted} onChange={(e) => setConfirmed(e.target.checked)} />确认向公众号全部关注者群发此内容</label>
       <button onClick={() => send(false)} disabled={busy || !confirmed || submitted} className="rounded bg-green-700 px-4 py-2 text-white disabled:opacity-50">{submitted ? '已提交，请核对记录' : '立即群发'}</button>
       </>}
-    </div>}
-    <WechatAutoPublish pushId={draft?.id} prepare={selected.length ? prepare : null} disabled={busy} />
+    </div>
     {message && <p role="status" className="text-sm text-green-700">{message}</p>}
     {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     <h3 className="font-semibold">最近推送记录</h3>

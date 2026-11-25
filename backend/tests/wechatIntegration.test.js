@@ -111,6 +111,15 @@ describe('WeChat OAuth and publishing', () => {
     const invalid = await request(app).put('/api/wechat/settings').set('Authorization', auth).send({ summaryPushCron: 'invalid' });
     expect(invalid.status).toBe(400);
   });
+  it('returns JSON for unknown management endpoints under both API prefixes', async () => {
+    const auth = await admin();
+    for (const prefix of ['/api/wechat', '/news/api/wechat']) {
+      const response = await request(app).get(`${prefix}/missing-endpoint`).set('Authorization', auth);
+      expect(response.status).toBe(404);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(response.body.code).toBe(404);
+    }
+  });
   it('preserves an uncertain browser publication without relaunching or resubmitting it', async () => {
     const auth = await admin();
     const draft = createPush([{ id: 1, title: '新闻' }]);

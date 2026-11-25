@@ -1,3 +1,4 @@
+import { trendBoards } from '../../../shared/trendBoards.js';
 import { createLogger, errorDetails } from '../utils/logger.js';
 
 const logger = createLogger('trends');
@@ -154,16 +155,18 @@ function platformLink(pattern) {
   return (_title, href) => href.match(pattern)?.[0];
 }
 
-const sources = [
-  { id: 'weibo', name: '微博热搜', url: 'https://s.weibo.com/top/summary?cate=realtimehot', load: loadWeibo },
-  { id: 'zhihu', name: '知乎热榜', url: 'https://www.zhihu.com/hot', load: withFallback(loadZhihu, 'zhihu', platformLink(/^https:\/\/www\.zhihu\.com\/question\/\d+(?=[/?#]|$)/)) },
-  { id: 'baidu', name: '百度热搜', url: 'https://top.baidu.com/board?tab=realtime', load: withFallback(loadBaidu, 'baidu', title => `https://www.baidu.com/s?wd=${encodeURIComponent(title)}`) },
-  { id: 'bilibili', name: '哔哩哔哩热门', url: 'https://www.bilibili.com/v/popular/all', load: loadBilibili },
-  { id: 'douyin', name: '抖音热榜', url: 'https://www.douyin.com/hot', load: loadDouyin },
-  { id: 'douban', name: '豆瓣电影新片榜', url: 'https://movie.douban.com/chart', load: withFallback(loadDoubanChart, 'douban-movie/', platformLink(/^https:\/\/movie\.douban\.com\/subject\/\d+(?=[/?#]|$)/),
-    { name: '豆瓣电影热度榜', url: 'https://tunbang.com/hot/douban-movie/' }) },
-  { id: 'juejin', name: '掘金热门文章', url: 'https://juejin.cn/', load: withFallback(loadJuejin, 'juejin', platformLink(/^https:\/\/juejin\.cn\/post\/\d+(?=[/?#]|$)/)) }
-];
+const loaders = {
+  weibo: loadWeibo,
+  zhihu: withFallback(loadZhihu, 'zhihu', platformLink(/^https:\/\/www\.zhihu\.com\/question\/\d+(?=[/?#]|$)/)),
+  baidu: withFallback(loadBaidu, 'baidu', title => `https://www.baidu.com/s?wd=${encodeURIComponent(title)}`),
+  bilibili: loadBilibili,
+  douyin: loadDouyin,
+  douban: withFallback(loadDoubanChart, 'douban-movie/', platformLink(/^https:\/\/movie\.douban\.com\/subject\/\d+(?=[/?#]|$)/),
+    { name: '豆瓣电影热度榜', url: 'https://tunbang.com/hot/douban-movie/' }),
+  juejin: withFallback(loadJuejin, 'juejin', platformLink(/^https:\/\/juejin\.cn\/post\/\d+(?=[/?#]|$)/))
+};
+
+const sources = trendBoards.map(board => ({ ...board, load: loaders[board.id] }));
 
 export function createTrendsService({ fetcher = globalThis.fetch, now = Date.now } = {}) {
   const states = new Map(sources.map(({ id }) => [id, {}]));

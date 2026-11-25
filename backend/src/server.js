@@ -40,6 +40,11 @@ const server = withLogTrigger(() => {
   });
 });
 
+server.on('error', err => {
+  logConsole('error', '[Server] Failed to listen:', err);
+  process.exit(1);
+});
+
 // Graceful shutdown on SIGTERM/SIGINT
 function gracefulShutdown(signal) {
   withLogTrigger(() => {

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { trendBoards } from '../../../shared/trendBoards.js';
 import { api } from '../services/api.js';
 
 const INITIAL_ITEMS = 10;
@@ -28,7 +29,7 @@ function TrendBoard({ board, onSelect }) {
       {board.status === 'stale' && <p className="mt-3 text-sm text-amber-800">更新失败，当前显示上次获取的榜单。</p>}
       {items.length === 0 ? (
         <p className="py-5 text-sm text-gray-600">
-          暂时无法获取。<a className="text-blue-700 underline" href={board.url} target="_blank" rel="noopener noreferrer">打开平台榜单</a>
+          {board.status === 'missing' ? '当前接口未提供此榜单。' : '暂时无法获取。'}<a className="text-blue-700 underline" href={board.url} target="_blank" rel="noopener noreferrer">打开平台榜单</a>
         </p>
       ) : (
         <ol className="divide-y">
@@ -112,13 +113,19 @@ export default function Trends() {
   useEffect(() => {
     const controller = new AbortController();
     api.getTrends({ refresh: attempt > 0, signal: controller.signal })
-      .then(data => { if (!controller.signal.aborted) setBoards(data.boards); })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        const supplied = new Map(data.boards.map(board => [board.id, board]));
+        setBoards(trendBoards.map(board => supplied.get(board.id) ?? { ...board, status: 'missing', items: [] }));
+      })
       .catch(() => { if (!controller.signal.aborted) setError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [attempt]);
 
   const visible = boards?.filter(board => !selected || board.id === selected) ?? [];
+
+  const missingBoards = boards?.filter(board => board.status === 'missing').length ?? 0;
 
   function refresh() {
     setLoading(true);
@@ -142,6 +149,11 @@ export default function Trends() {
               onClick={() => setSelected(board.id)}>{board.name}</button>
           ))}
         </div>
+      )}
+      {missingBoards > 0 && (
+        <p role="status" className="mb-4 text-sm text-amber-800">
+          当前热搜接口只返回了 {trendBoards.length - missingBoards} 个榜单。请检查部署版本和代理路由，或直接打开平台榜单。
+        </p>
       )}
       {error && <p role="alert" className="mb-4 text-sm text-red-700">获取榜单失败，请点击「刷新榜单」重试。</p>}
       {loading && !boards && <p role="status" className="news-message">正在获取各平台热搜…</p>}
