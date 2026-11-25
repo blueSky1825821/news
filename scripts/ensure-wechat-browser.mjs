@@ -1,11 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import '../backend/src/config.js';
-import { getWechatBrowserExecutable } from '../backend/src/services/wechatBrowser.js';
+import { getWechatBrowserExecutable, launchWechatBrowser } from '../backend/src/services/wechatBrowser.js';
 
 try {
   const executable = getWechatBrowserExecutable();
-  if (executable) {
+  if (process.argv.includes('--check')) {
+    const browser = await launchWechatBrowser();
+    await browser.close();
+    console.log('  WeChat browser launch check passed.');
+  } else if (executable) {
     console.log(`  WeChat browser ready: ${executable}`);
   } else {
     const cli = fileURLToPath(new URL('../backend/node_modules/playwright/cli.js', import.meta.url));

@@ -101,11 +101,12 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
       ? '登录任务已中断，请重新扫码。'
       : messages[job?.status || 'starting'];
   const taskMessage = job?.message || statusMessage;
+  const failed = ['failed', 'unknown', 'idle'].includes(job?.status);
   const alreadySubmitted = jobId === pushId && ['published', 'unknown'].includes(job?.status);
   return <div className="space-y-2">
     {(loginOnly || pushId || prepare) && <button type="button" onClick={start} disabled={disabled || starting || running || alreadySubmitted}
       className="rounded bg-green-700 px-4 py-2 text-sm text-white disabled:opacity-50">{loginOnly ? '扫码登录公众号' : '自动发表到公众号'}</button>}
-    {(job || starting || running) && <p role="status" className="text-sm text-gray-700">
+    {(job || starting || running) && <p role={failed && !starting ? "alert" : "status"} className={failed && !starting ? "text-sm text-red-600" : "text-sm text-gray-700"}>
       {starting ? messages.starting : taskMessage}
     </p>}
     {error && <p role="alert" className="text-sm text-red-600">{error}</p>}

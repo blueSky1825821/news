@@ -1,5 +1,19 @@
 import { accessSync, constants } from 'node:fs';
 import { join } from 'node:path';
+import { chromium } from 'playwright';
+
+export async function launchWechatBrowser() {
+  if (process.platform === 'linux' && process.geteuid?.() === 0) {
+    throw Object.assign(new Error('Chromium sandbox requires a non-root backend user on Linux'), {
+      code: 'WECHAT_BROWSER_ROOT'
+    });
+  }
+  return chromium.launch({
+    executablePath: getWechatBrowserExecutable(),
+    chromiumSandbox: true,
+    timeout: 15_000
+  });
+}
 
 export function getWechatBrowserExecutable() {
   const configured = process.env.WECHAT_BROWSER_EXECUTABLE;

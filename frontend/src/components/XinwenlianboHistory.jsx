@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { api } from '../services/api.js';
-import { readNewsHeadlines } from '../services/newsHeadlines.js';
+import XinwenlianboHeadlines from './XinwenlianboHeadlines.jsx';
+import { readNewsOutline } from '../services/newsHeadlines.js';
 
 export const TASK_LABELS = {
   pending: '待抓取',
@@ -45,15 +46,13 @@ function RecordContent({ id, status, revision }) {
   );
   if (!record) return <p role="status" className="mt-3 text-sm text-gray-600">正在加载任务详情…</p>;
 
-  const headlines = readNewsHeadlines(record.headlines);
+  const headlines = readNewsOutline(record.headlines, record.transcript || record.summary);
   return (
     <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3 text-sm">
       <div>
         <h4 className="font-semibold">提取的标题</h4>
         {headlines.length ? (
-          <ol className="mt-1 list-decimal space-y-1 pl-5 text-gray-700">
-            {headlines.map((title, index) => <li key={index}>{title}</li>)}
-          </ol>
+          <XinwenlianboHeadlines headlines={headlines} className="mt-1 list-decimal space-y-1 pl-5 text-gray-700" />
         ) : <p className="mt-1 text-gray-600">暂无可提取的标题。</p>}
       </div>
       <div>

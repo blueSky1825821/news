@@ -2,7 +2,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { prepareArticleContent } from '../services/articleContent.js';
 import { api } from '../services/api.js';
-import { readNewsHeadlines } from '../services/newsHeadlines.js';
+import XinwenlianboHeadlines from './XinwenlianboHeadlines.jsx';
+import { readNewsOutline } from '../services/newsHeadlines.js';
 import LikeButton from './LikeButton.jsx';
 import CommentSection from './CommentSection.jsx';
 import InvestmentAnalysis from './InvestmentAnalysis.jsx';
@@ -71,7 +72,7 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
     }
   };
 
-  const headlines = readNewsHeadlines(article?.headlines);
+  const headlines = readNewsOutline(article?.headlines, article?.transcript || article?.summary);
   const html = useMemo(() => prepareArticleContent(article?.content, article?.originalUrl), [article?.content, article?.originalUrl]);
 
   if (loading) {
@@ -158,9 +159,7 @@ export default function NewsDetail({ user, onPlaySingle, isAdmin = false, massSe
       {article.category === 'xinwenlianbo' && headlines.length > 0 && (
         <div className="mb-4 rounded-lg bg-red-50 p-4">
           <h3 className="mb-2 text-sm font-semibold text-red-800">今日要闻</h3>
-          <ol className="list-decimal pl-5 text-sm text-red-700">
-            {headlines.map((title, index) => <li key={index}>{title}</li>)}
-          </ol>
+          <XinwenlianboHeadlines headlines={headlines} className="list-decimal pl-5 text-sm text-red-700" />
         </div>
       )}
 
