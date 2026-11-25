@@ -12,6 +12,7 @@ const logger = createLogger('wechatPublisher');
 
 const origin = 'https://mp.weixin.qq.com';
 const scanTimeout = 180_000;
+const coverPreviewTimeout = 180_000;
 const qrCaptureInterval = 4000;
 const dialogs = '.weui-desktop-dialog:visible, [role="dialog"]:visible';
 const qrImage = 'img[src*="qrcode"], img[src*="scanlogin"], canvas';
@@ -187,9 +188,12 @@ async function generateCover(page, beginStep) {
   const preview = visible(page, '.js_cover_preview_new, .js_cover_preview_square');
   const coverDialog = page.locator(dialogs).filter({ hasText: /生成封面|编辑封面|设置封面/ }).first();
   const confirm = button(coverDialog, /^\s*(确定|确认|完成|使用封面)\s*$/);
-  await preview.or(confirm).first().waitFor();
-  if (await confirm.isVisible()) await confirm.click();
-  await preview.waitFor();
+  const deadline = Date.now() + coverPreviewTimeout;
+  // Playwright treats a zero timeout as unlimited.
+  const remaining = () => Math.max(1, deadline - Date.now());
+  await preview.or(confirm).first().waitFor({ timeout: remaining() });
+  if (await confirm.isVisible()) await confirm.click({ timeout: remaining() });
+  await preview.waitFor({ timeout: remaining() });
 }
 
 async function setNewsSource(page) {
