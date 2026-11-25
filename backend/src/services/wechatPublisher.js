@@ -127,19 +127,24 @@ async function prepareArticle(page, push, token, broadcast, beginStep) {
   await titleField.fill(title);
   const filledTitle = await titleField.evaluate(node => node.value ?? node.textContent);
   if (filledTitle.trim() !== title) throw new Error('微信图文标题校验失败。');
-  beginStep('editor_body', '未能填写微信图文正文，请检查微信图文编辑器的正文输入区。');
+  beginStep('editor_body_locate', '未找到可编辑的微信图文正文输入区。');
   const summary = broadcast?.summary?.trim();
   const lines = summary ? summary.split(/\r?\n/) : formatHeadlineLines(push.articles);
   const editor = visible(page, [
-    '#ueditor_0 .ProseMirror[contenteditable="true"]',
-    '.rich_media_content.ProseMirror[contenteditable="true"]',
-    '#js_ueditor .ProseMirror[contenteditable="true"]',
-    '#js_ueditor [contenteditable="true"][role="textbox"]',
-    'iframe[id^="ueditor"]'
+    '#ueditor_0[contenteditable="true"]',
+    '#ueditor_0 [contenteditable="true"]',
+    '#js_ueditor[contenteditable="true"]',
+    '#js_ueditor [contenteditable="true"]',
+    '#js_content[contenteditable="true"]',
+    '.rich_media_content[contenteditable="true"]',
+    '.ProseMirror[contenteditable="true"]',
+    'iframe[id^="ueditor"], iframe[name^="ueditor"], #js_ueditor iframe, #ueditor_0 iframe'
   ].join(', '));
   const field = await editor.evaluate(node => node.tagName) === 'IFRAME'
-    ? editor.contentFrame().locator('body[contenteditable="true"]')
+    ? visible(editor.contentFrame(), 'body[contenteditable="true"], .ProseMirror[contenteditable="true"], #ueditor_0[contenteditable="true"]')
     : editor;
+  await field.waitFor();
+  beginStep('editor_body_write', '已找到正文输入区，但未能写入微信图文正文。');
   await field.click();
   for (const [index, line] of lines.entries()) {
     if (index) await page.keyboard.press('Enter');
@@ -155,14 +160,20 @@ async function prepareArticle(page, push, token, broadcast, beginStep) {
   }, { text: moreNewsText, url: moreNewsUrl });
   if (!inserted) await page.keyboard.insertText(moreNewsText);
 
-  const bodyText = await field.innerText();
-  const normalizedBody = bodyText.replace(/\s+/g, ' ').trim();
-  const expectedBody = [...lines, moreNewsText].join(' ').replace(/\s+/g, ' ').trim();
-  if (!normalizedBody.includes(expectedBody)) throw new Error('微信图文正文校验失败。');
+  beginStep('editor_body_verify', '微信正文回读校验失败，新闻内容或「查看更多」链接文字可能未完整写入。');
+  // Editors render paragraph boundaries differently in the DOM.
+  const compact = text => text.replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
+  const bodyText = compact(await field.innerText());
+  let offset = 0;
+  for (const line of [...lines, moreNewsText]) {
+    const expected = compact(line);
+    const index = bodyText.indexOf(expected, offset);
+    if (index < 0) throw new Error('微信图文正文校验失败。');
+    offset = index + expected.length;
+  }
 }
 
 async function generateCover(page, beginStep) {
-
   beginStep('cover_selection', '未能打开微信图文的封面选择菜单。');
   const coverArea = page.getByText('拖拽或选择封面', { exact: true }).filter({ visible: true }).first();
   await coverArea.or(visible(page, '.js_cover_btn_area')).first().click();
@@ -201,7 +212,7 @@ async function setNewsSource(page) {
 }
 
 async function markOriginal(page) {
-  const declared = page.getByText(/^已声明原创$|^已声明$/).filter({ visible: true }).first();
+  const declared = page.getByText('已声明原创', { exact: true }).filter({ visible: true }).first();
   const declaredArea = visible(page, '#js_original_open');
   if (await declared.isVisible() || await declaredArea.isVisible()) return;
 
@@ -241,10 +252,12 @@ async function publish(page, job, id, beginStep) {
   const confirmation = page.locator(dialogs).filter({ hasText: /确认发表|继续发表|发表后/ }).first();
   const confirm = button(confirmation, /^\s*(继续发表|确认发表|发表)\s*$/);
   const continuePublish = button(page, /^\s*继续发表\s*$/);
-  const verification = page.locator(dialogs).filter({ hasText: /扫码|扫一扫|微信验证|身份验证/ });
+  const verification = page.locator(dialogs).filter({ hasText: /扫码|扫一扫|微信验证|身份验证/ }).first();
   const qr = visible(verification, `.qrcode img, img.qrcode, ${qrImage}`);
   const frameQr = visible(verification.locator('iframe').first().contentFrame(), `img, ${qrImage}`);
   const success = page.getByText(/^(发表成功|已发表成功|内容发表成功|文章发表成功)(?:[！!。，,].*)?$/).filter({ visible: true }).first();
+  const rejected = page.getByText(/^(发表失败|发布失败|暂无法发表)(?:[！!。，,].*)?$/)
+    .filter({ visible: true }).first();
   let confirmed = false;
   const deadline = Date.now() + scanTimeout;
   while (Date.now() < deadline) {
@@ -252,6 +265,9 @@ async function publish(page, job, id, beginStep) {
     if (await success.isVisible()) {
       db.prepare("UPDATE wechat_publications SET status = 'published' WHERE pushId = ?").run(id);
       return;
+    }
+    if (await rejected.isVisible()) {
+      throw Object.assign(new Error('微信提示发表失败。'), { code: 'WECHAT_PUBLISH_REJECTED' });
     }
     if (await qr.isVisible()) {
       await showQr(job, qr, 'publish_scan');
@@ -343,6 +359,9 @@ async function runBrowserJob(job, push) {
   } catch (error) {
     if (error.code === 'WECHAT_BROWSER_ROOT') {
       failure = '当前后端以 root 运行，Chromium 沙箱无法启动。请使用普通系统账号运行后端。';
+    }
+    if (error.code === 'WECHAT_PUBLISH_REJECTED') {
+      failure = '微信页面提示发表失败。';
     }
     const stored = push && getDb().prepare('SELECT status FROM wechat_publications WHERE pushId = ?').get(push.id);
     job.status = stored?.status || 'failed';
