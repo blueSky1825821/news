@@ -20,14 +20,16 @@ function TrendBoard({ board, onSelect }) {
             {board.status === 'stale' ? '上次获取 ' : '获取于 '}
             <time dateTime={board.updatedAt}>{timeFormat.format(new Date(board.updatedAt))}</time>
             {board.providerUrl && (
-              <> · 数据来自 {board.provider}</>
+              <> · 数据来自 <a className="underline" href={board.providerUrl} target="_blank" rel="noopener noreferrer">{board.provider}</a></>
             )}
           </p>
         )}
       </header>
       {board.status === 'stale' && <p className="mt-3 text-sm text-amber-800">更新失败，当前显示上次获取的榜单。</p>}
       {items.length === 0 ? (
-        <p className="py-5 text-sm text-gray-600">暂时无法获取，请稍后刷新。</p>
+        <p className="py-5 text-sm text-gray-600">
+          暂时无法获取。<a className="text-blue-700 underline" href={board.url} target="_blank" rel="noopener noreferrer">打开平台榜单</a>
+        </p>
       ) : (
         <ol className="divide-y">
           {items.map(item => (

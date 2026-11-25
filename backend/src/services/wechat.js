@@ -50,7 +50,7 @@ export function createPush(articles, flaggedIds = []) {
   const base = platformBase();
   const url = `${base}/push/${id}`;
   // Store a fixed snapshot so previously sent lists do not change with later crawls.
-  const snapshot = sorted.map(({ id, title, summary, sourceName, publishedAt, originalUrl }) => ({ id, title, summary, sourceName, publishedAt, originalUrl }));
+  const snapshot = sorted.map(({ id, title, summary, sourceName, publishedAt, originalUrl, sourceType }) => ({ id, title, summary, sourceName, publishedAt, originalUrl, sourceType }));
   const text = composeMessage(preview.title, snapshot, url);
   const { createdAt } = getDb().prepare(
     'INSERT INTO news_pushes (id, title, articles) VALUES (?, ?, ?) RETURNING createdAt'

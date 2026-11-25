@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { api } from '../services/api.js';
+import WechatAutoPublish from './WechatAutoPublish.jsx';
 import XinwenlianboHistory, { TASK_LABELS } from './XinwenlianboHistory.jsx';
 
 export default function XinwenlianboCollection({ refresh = 0 }) {
@@ -11,8 +12,18 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
   const [statusError, setStatusError] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
+  const [publication, setPublication] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const publicationPanel = useRef(null);
   const status = task?.status ?? 'pending';
   const running = status === 'collecting';
+  const target = selectedRecord || (status === 'completed' && task?.articleId ? task : null);
+  const targetDate = target?.taskDate ?? target?.date;
+
+  function selectPublication(record) {
+    setSelectedRecord(record);
+    publicationPanel.current.scrollIntoView({ block: 'nearest' });
+  }
 
   useEffect(() => {
     if (submitting) return;
@@ -35,6 +46,12 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
     update();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [submitting, refresh]);
+
+  async function preparePublication() {
+    const draft = await api.createWechatPush([target.articleId]);
+    setPublication({ articleId: target.articleId, completedAt: target.completedAt, draft });
+    return draft;
+  }
 
   async function collect(force = false) {
     if (submitting) return;
@@ -78,6 +95,18 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
             <Link to={`/article/${task.articleId}`} className="news-action">{status === 'completed' ? '查看主要内容' : '查看上次内容'}</Link>
           )}
         </div>
+        <div ref={publicationPanel} className="mt-3 space-y-2">
+          {targetDate && <p className="text-sm text-gray-700">公众号发表 · {targetDate} 新闻联播</p>}
+          <div className="flex flex-wrap items-start gap-3">
+            <WechatAutoPublish
+              pushId={target && publication?.articleId === target.articleId && publication?.completedAt === target.completedAt
+                ? publication.draft.id : undefined}
+              prepare={target ? preparePublication : null}
+              disabled={running || submitting || confirm} />
+            <Link to="/wechat-settings" className="news-action">公众号后台扫码登录</Link>
+            {selectedRecord && <button type="button" className="news-action" onClick={() => setSelectedRecord(null)}>返回今日选稿</button>}
+          </div>
+        </div>
         {confirm && (
           <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
             <p>重新抓取成功后会更新当天主要内容。</p>
@@ -88,7 +117,8 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
           </div>
         )}
       </section>
-      <XinwenlianboHistory refresh={refresh} task={task} busy={running || submitting} onTaskChange={setTask} />
+      <XinwenlianboHistory refresh={refresh} task={task} busy={running || submitting} onTaskChange={setTask} onSelectPublication={selectPublication}
+        onRecordDeleted={id => setSelectedRecord(current => current?.id === id ? null : current)} />
     </>
   );
 }

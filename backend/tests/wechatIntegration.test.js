@@ -96,12 +96,15 @@ describe('WeChat OAuth and publishing', () => {
     const user = findOrCreateWechatUser('wx123', 'ordinary');
     const userToken = `Bearer ${generateToken({ userId: user.id })}`;
     for (const prefix of ['/api/wechat', '/news/api/wechat']) {
-      for (const [method, path] of [['get', '/settings'], ['put', '/settings'], ['post', '/flag'], ['get', '/flags'], ['get', '/preview-content'], ['post', '/preview'], ['get', '/logs'], ['post', '/pushes'], ['post', '/pushes/id/send'], ['get', '/pushes/id/publication'], ['post', '/pushes/id/publication']]) {
+      for (const [method, path] of [['get', '/settings'], ['put', '/settings'], ['post', '/flag'], ['get', '/flags'], ['get', '/preview-content'], ['post', '/preview'], ['get', '/logs'], ['get', '/browser-login'], ['post', '/browser-login'], ['post', '/pushes'], ['post', '/pushes/id/send'], ['get', '/pushes/id/publication'], ['post', '/pushes/id/publication']]) {
         expect((await request(app)[method](prefix + path)).status).toBe(401);
         expect((await request(app)[method](prefix + path).set('Authorization', userToken)).status).toBe(403);
       }
     }
     const auth = await admin();
+    const login = await request(app).get('/api/wechat/browser-login').set('Authorization', auth);
+    expect(login.headers['cache-control']).toBe('no-store');
+    expect(login.body.data).toEqual({ status: 'idle' });
     const settings = await request(app).get('/api/wechat/settings').set('Authorization', auth);
     expect(settings.body.data.appSecretConfigured).toBe(true);
     for (const key of ['appSecret', 'accessToken', 'tokenExpiresAt']) expect(settings.body.data[key]).toBeUndefined();

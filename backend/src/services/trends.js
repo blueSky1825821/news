@@ -1,3 +1,6 @@
+import { createLogger, errorDetails } from '../utils/logger.js';
+
+const logger = createLogger('trends');
 const CACHE_MS = 5 * 60_000;
 const REFRESH_COOLDOWN_MS = 60_000;
 const MAX_STALE_MS = 24 * 60 * 60_000;
@@ -29,7 +32,7 @@ async function fetchResponse(fetcher, url, accept) {
   const response = await fetcher(url, {
     headers: { Accept: accept },
     redirect: 'error',
-    signal: AbortSignal.timeout(3500)
+    signal: AbortSignal.timeout(5000)
   });
   if (!response.ok) throw new Error(`Upstream returned HTTP ${response.status}`);
   return response;
@@ -89,13 +92,15 @@ function loadDouyin(fetcher) {
   });
 }
 
-async function loadDouban(fetcher) {
+async function loadDoubanChart(fetcher) {
   const response = await fetchResponse(fetcher, 'https://movie.douban.com/chart', 'text/html');
   const html = await response.text();
   const rows = Array.from(html.matchAll(/<tr\b[^>]*\bclass="item"[^>]*>([\s\S]*?)<\/tr>/gi), ([, row]) => {
-    const film = row.match(/<a\b[^>]*\bclass="nbg"[^>]*\bhref="https:\/\/movie\.douban\.com\/subject\/(\d+)\/"[^>]*\btitle="([^"]+)"/i);
+    const anchor = row.match(/<a\b[^>]*\bclass="nbg"[^>]*>/i)?.[0] ?? '';
+    const id = anchor.match(/\bhref="https:\/\/movie\.douban\.com\/subject\/(\d+)\/"/i)?.[1];
+    const title = anchor.match(/\btitle="([^"]+)"/i)?.[1] ?? '';
     const score = row.match(/<span\b[^>]*\bclass="rating_nums"[^>]*>([\d.]+)<\/span>/i)?.[1];
-    return { title: decodeHtmlText(film?.[2] ?? ''), url: film && `https://movie.douban.com/subject/${film[1]}/`, heat: score ? `评分 ${score}` : '' };
+    return { title: decodeHtmlText(title), url: id && `https://movie.douban.com/subject/${id}/`, heat: score ? `评分 ${score}` : '' };
   });
   return { items: normalizeItems(rows), provider: '豆瓣' };
 }
@@ -135,14 +140,29 @@ async function loadBaidu(fetcher) {
   return { items, provider: '百度' };
 }
 
+function withFallback(load, path, getLink, metadata = {}) {
+  return async fetcher => {
+    try {
+      return await load(fetcher);
+    } catch {
+      return { ...await loadTunbang(fetcher, path, getLink), ...metadata };
+    }
+  };
+}
+
+function platformLink(pattern) {
+  return (_title, href) => href.match(pattern)?.[0];
+}
+
 const sources = [
   { id: 'weibo', name: '微博热搜', url: 'https://s.weibo.com/top/summary?cate=realtimehot', load: loadWeibo },
-  { id: 'zhihu', name: '知乎热榜', url: 'https://www.zhihu.com/hot', load: loadZhihu },
-  { id: 'baidu', name: '百度热搜', url: 'https://top.baidu.com/board?tab=realtime', load: loadBaidu },
+  { id: 'zhihu', name: '知乎热榜', url: 'https://www.zhihu.com/hot', load: withFallback(loadZhihu, 'zhihu', platformLink(/^https:\/\/www\.zhihu\.com\/question\/\d+(?=[/?#]|$)/)) },
+  { id: 'baidu', name: '百度热搜', url: 'https://top.baidu.com/board?tab=realtime', load: withFallback(loadBaidu, 'baidu', title => `https://www.baidu.com/s?wd=${encodeURIComponent(title)}`) },
   { id: 'bilibili', name: '哔哩哔哩热门', url: 'https://www.bilibili.com/v/popular/all', load: loadBilibili },
   { id: 'douyin', name: '抖音热榜', url: 'https://www.douyin.com/hot', load: loadDouyin },
-  { id: 'douban', name: '豆瓣电影新片榜', url: 'https://movie.douban.com/chart', load: loadDouban },
-  { id: 'juejin', name: '掘金热门文章', url: 'https://juejin.cn/', load: loadJuejin }
+  { id: 'douban', name: '豆瓣电影新片榜', url: 'https://movie.douban.com/chart', load: withFallback(loadDoubanChart, 'douban-movie/', platformLink(/^https:\/\/movie\.douban\.com\/subject\/\d+(?=[/?#]|$)/),
+    { name: '豆瓣电影热度榜', url: 'https://tunbang.com/hot/douban-movie/' }) },
+  { id: 'juejin', name: '掘金热门文章', url: 'https://juejin.cn/', load: withFallback(loadJuejin, 'juejin', platformLink(/^https:\/\/juejin\.cn\/post\/\d+(?=[/?#]|$)/)) }
 ];
 
 export function createTrendsService({ fetcher = globalThis.fetch, now = Date.now } = {}) {
@@ -172,7 +192,10 @@ export function createTrendsService({ fetcher = globalThis.fetch, now = Date.now
         state.updatedAt = now();
         state.failed = false;
       })
-      .catch(() => { state.failed = true; })
+      .catch(error => {
+        state.failed = true;
+        logger.warn('board_fetch_failed', { board: id, ...errorDetails(error), reason: error.message });
+      })
       .finally(() => {
         state.lastAttempt = now();
         state.pending = null;

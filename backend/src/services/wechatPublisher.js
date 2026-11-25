@@ -12,6 +12,7 @@ const dialogs = '.weui-desktop-dialog:visible, [role="dialog"]:visible';
 const qrImage = 'img[src*="qrcode"], img[src*="scanlogin"], canvas';
 const newsSourceLabel = /^素材来源\s*官方媒体\s*[\/／]\s*网络新闻$/;
 let activeJob;
+let lastLogin;
 
 function httpError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
@@ -54,7 +55,6 @@ async function login(page, context, job, sessionPath) {
     if (token) {
       job.qr = null;
       job.message = null;
-      job.status = 'preparing';
       const temporary = `${sessionPath}.tmp`;
       await writeFile(temporary, JSON.stringify(await context.storageState({ indexedDB: true })), { mode: 0o600 });
       await chmod(temporary, 0o600);
@@ -99,14 +99,14 @@ async function makeCover(context, title) {
   }
 }
 
-async function prepareArticle(context, page, push, token) {
+async function prepareArticle(context, page, push, token, broadcast) {
   const query = new URLSearchParams({ t: 'media/appmsg_edit_v2', action: 'edit', isNew: '1', type: '10', lang: 'zh_CN', token });
   await page.goto(`${origin}/cgi-bin/appmsg?${query}`, { waitUntil: 'domcontentloaded' });
   if (new URL(page.url()).origin !== origin) throw new Error('微信编辑器地址已变化。');
   const title = Array.from(push.title.trim()).slice(0, 64).join('');
   const titleField = visible(page, 'textarea#title, .title-editor__input [contenteditable="true"], #js_title_main [contenteditable="true"]');
   await titleField.fill(title);
-  const body = push.articles.map(({ title }, i) => push.articles.length === 1 ? title : `${i + 1}. ${title}`).join('\n');
+  const body = broadcast?.summary?.trim() || push.articles.map(({ title }, i) => push.articles.length === 1 ? title : `${i + 1}. ${title}`).join('\n');
   const editor = visible(page, '#ueditor_0 .ProseMirror, .rich_media_content.ProseMirror, #js_ueditor .ProseMirror, iframe[id^="ueditor"]');
   const field = await editor.evaluate(node => node.tagName) === 'IFRAME'
     ? editor.contentFrame().locator('body[contenteditable="true"]')
@@ -224,7 +224,7 @@ async function publish(page, job, id) {
   throw new Error('微信未显示发表成功，请到微信公众平台核对。');
 }
 
-async function runPublication(job, push, userId) {
+async function runBrowserJob(job, userId, push) {
   let browser;
   let failure = '无法启动发表浏览器。请检查服务器上的 Chromium 安装。';
   try {
@@ -251,21 +251,31 @@ async function runPublication(job, push, userId) {
     const page = await context.newPage();
     const token = await login(page, context, job, sessionPath);
     if (!token) {
-      failure = '登录等待超时，请重新发起发表并扫码确认。';
+      failure = '登录等待超时，请重新发起扫码登录。';
       throw new Error(failure);
     }
+    if (!push) {
+      job.status = 'logged_in';
+      return;
+    }
+    job.status = 'preparing';
     failure = '微信图文编辑器未能填入标题、正文或封面，请核对账号的图文发表权限。';
-    await prepareArticle(context, page, push, token);
+    const broadcast = push.articles.length === 1 && push.articles[0].sourceType === 'xinwenlianbo'
+      ? push.articles[0]
+      : null;
+    await prepareArticle(context, page, push, token, broadcast);
     failure = '未能设置创作来源为「素材来源官方媒体 / 网络新闻」，发表已停止。';
     await setNewsSource(page);
-    failure = '未能完成微信原创声明，发表已停止。';
-    await markOriginal(page);
+    if (!broadcast) {
+      failure = '未能完成微信原创声明，发表已停止。';
+      await markOriginal(page);
+    }
     failure = '未能确认发表结果，请到微信公众平台核对。';
     await publish(page, job, push.id);
     job.qr = null;
     job.status = 'published';
   } catch {
-    const stored = getDb().prepare('SELECT status FROM wechat_publications WHERE pushId = ?').get(push.id);
+    const stored = push && getDb().prepare('SELECT status FROM wechat_publications WHERE pushId = ?').get(push.id);
     job.status = stored?.status || 'failed';
     job.message = job.status === 'unknown' ? '发表结果待核对，请到微信公众平台检查发表记录。同一选稿已锁定。'
       : failure;
@@ -274,6 +284,22 @@ async function runPublication(job, push, userId) {
     await browser?.close().catch(() => {});
     job.finished = true;
   }
+}
+
+export function getBrowserLoginStatus(userId) {
+  if (!lastLogin || lastLogin.userId !== userId) return { status: 'idle' };
+  const { status, qr, message } = lastLogin;
+  return { status, qr, message };
+}
+
+export function startBrowserLogin(userId) {
+  if (activeJob && !activeJob.finished) {
+    if (activeJob === lastLogin && activeJob.userId === userId) return getBrowserLoginStatus(userId);
+    throw httpError('已有公众号任务正在进行，请稍候。', 409);
+  }
+  activeJob = lastLogin = { userId, status: 'starting', qr: null, finished: false };
+  void runBrowserJob(activeJob, userId);
+  return getBrowserLoginStatus(userId);
 }
 
 export function getPublicationStatus(id, userId) {
@@ -290,11 +316,11 @@ export function startPublication(id, userId) {
   if (!push) throw httpError('新闻列表不存在', 404);
   if (activeJob && !activeJob.finished) {
     if (activeJob.id === id && activeJob.userId === userId) return getPublicationStatus(id, userId);
-    throw httpError('已有发表任务正在进行，请稍候。', 409);
+    throw httpError('已有公众号任务正在进行，请稍候。', 409);
   }
   const current = getPublicationStatus(id, userId);
   if (['published', 'unknown'].includes(current.status)) return current;
   activeJob = { id, userId, status: 'starting', qr: null, finished: false };
-  void runPublication(activeJob, push, userId);
+  void runBrowserJob(activeJob, userId, push);
   return getPublicationStatus(id, userId);
 }

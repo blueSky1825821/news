@@ -72,7 +72,7 @@ function RecordContent({ id, status, revision }) {
   );
 }
 
-export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange }) {
+export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange, onSelectPublication, onRecordDeleted }) {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -115,6 +115,7 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange 
     try {
       const data = await api.deleteXinwenlianboRecord(id, { deleteArticle });
       onTaskChange(data.status);
+      onRecordDeleted(id);
       setDeleteTarget(null);
       setDetailsId(current => current === id ? null : current);
       setResult(null);
@@ -168,6 +169,10 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange 
                       {expanded ? '收起记录' : '查看记录'}
                     </button>
                     {record.articleId && <Link to={`/article/${record.articleId}`} className="news-action">查看新闻</Link>}
+                    {record.articleId && record.status === 'completed' && (
+                      <button type="button" className="news-action" disabled={busy || deleting}
+                        onClick={() => onSelectPublication(record)}>选作公众号发表</button>
+                    )}
                     <button type="button" className="news-action text-red-700"
                       disabled={activeRecord || deleting || confirmingDelete}
                       onClick={() => confirmDeletion(record.id)}>

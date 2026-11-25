@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import WechatAutoPublish from './WechatAutoPublish.jsx';
 import WechatPushManager from './WechatPushManager.jsx';
 
 export default function WechatSettings() {
@@ -179,6 +180,11 @@ export default function WechatSettings() {
       </form>
       </details>
 
+      <section className="mt-8 space-y-3 rounded-lg border bg-white p-6">
+        <h2 className="text-lg font-semibold">微信公众平台登录</h2>
+        <p className="text-sm text-gray-600">发表新闻前可先扫码登录。微信要求核验时，请在发表页面继续扫码确认。</p>
+        <WechatAutoPublish loginOnly />
+      </section>
       <WechatPushManager massSendEnabled={settings.massSendEnabled} />
 
       {settings.massSendEnabled && <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

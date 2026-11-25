@@ -153,6 +153,14 @@ export const api = {
     return request('/api/wechat/pushes', { method: 'POST', body: JSON.stringify({ articleIds }) });
   },
 
+  startWechatBrowserLogin() {
+    return request('/api/wechat/browser-login', { method: 'POST' });
+  },
+
+  getWechatBrowserLogin() {
+    return request('/api/wechat/browser-login', { cache: 'no-store' });
+  },
+
   startWechatPublication(id) {
     return request(`/api/wechat/pushes/${id}/publication`, { method: 'POST' });
   },

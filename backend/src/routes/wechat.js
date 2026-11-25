@@ -7,9 +7,10 @@ import { getDb } from '../db.js';
 import { startSummaryPushScheduler, stopSummaryPushScheduler } from '../services/scheduler.js';
 import { getWechatSettings, setWechatSettings } from '../models/wechatSettings.js';
 import { flagArticle, unflagArticle, isFlagged, listFlaggedArticleIds } from '../models/articleFlag.js';
+import { getSourceById } from '../models/source.js';
 import { getRecentArticles, getArticleById } from '../models/article.js';
 import { pushPreview, generatePreviewContent, createPush, getPush, sendPush } from '../services/wechat.js';
-import { getPublicationStatus, startPublication } from '../services/wechatPublisher.js';
+import { getBrowserLoginStatus, startBrowserLogin, getPublicationStatus, startPublication } from '../services/wechatPublisher.js';
 import wechatAuth from './wechatAuth.js';
 
 const router = Router();
@@ -45,9 +46,24 @@ router.post('/pushes', (req, res, next) => {
     }
     const articles = [...new Set(articleIds)].map(getArticleById);
     if (articles.some((article) => !article)) throw Object.assign(new Error('部分新闻已不存在，请刷新后重试'), { statusCode: 404 });
+    if (articles.length === 1 && getSourceById(articles[0].sourceId)?.type === 'xinwenlianbo') {
+      articles[0].sourceType = 'xinwenlianbo';
+    }
     res.sendJson(0, 'success', createPush(articles));
   } catch (err) { next(err); }
 });
+
+router.route('/browser-login')
+  .get((req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.sendJson(0, 'success', getBrowserLoginStatus(req.userId));
+  })
+  .post((req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.sendJson(0, 'success', startBrowserLogin(req.userId));
+    } catch (err) { next(err); }
+  });
 
 router.post('/pushes/:id/publication', (req, res, next) => {
   try {
