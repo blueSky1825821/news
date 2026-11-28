@@ -6,6 +6,9 @@ import WechatAutoPublish from './WechatAutoPublish.jsx';
 import XinwenlianboHistory, { TASK_LABELS } from './XinwenlianboHistory.jsx';
 
 export default function XinwenlianboCollection({ refresh = 0 }) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  const [date, setDate] = useState(today);
+  const [statusRevision, setStatusRevision] = useState(0);
   const [task, setTask] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -16,7 +19,7 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const publicationPanel = useRef(null);
   const status = task?.status ?? 'pending';
-  const running = status === 'collecting';
+  const running = Boolean(task?.activeDate);
   const target = selectedRecord || (status === 'completed' && task?.articleId ? task : null);
   const targetDate = target?.taskDate ?? target?.date;
 
@@ -32,10 +35,10 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
     let delay = 20_000;
     async function update() {
       try {
-        const data = await api.getXinwenlianboStatus({ signal: controller.signal });
+        const data = await api.getXinwenlianboStatus({ date, signal: controller.signal });
         if (controller.signal.aborted) return;
         setTask(data);
-        delay = data.status === 'collecting' ? 2500 : 20_000;
+        delay = data.activeDate ? 2500 : 20_000;
         setStatusError(false);
       } catch {
         if (!controller.signal.aborted) setStatusError(true);
@@ -45,7 +48,7 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
     }
     update();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [submitting, refresh]);
+  }, [date, submitting, refresh, statusRevision]);
 
   async function preparePublication() {
     const draft = await api.createWechatPush([target.articleId]);
@@ -59,7 +62,7 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
     setSubmitting(true);
     setActionError('');
     try {
-      setTask(await api.triggerXinwenlianbo({ force }));
+      setTask(await api.triggerXinwenlianbo({ date, force }));
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -76,7 +79,10 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
             {task?.date && `${task.date} · `}{task ? TASK_LABELS[status] ?? status : '正在获取状态…'}
           </p>
         </div>
-        <p className="mt-1 text-sm text-gray-600">读取央视网当天《新闻联播》完整版的内容简介。</p>
+        <p className="mt-1 text-sm text-gray-600">读取央视网所选日期《新闻联播》完整版的内容简介。</p>
+        {running && task.activeDate !== date && (
+          <p role="status" className="mt-1 text-sm text-gray-600">正在抓取 {task.activeDate} 的新闻联播。</p>
+        )}
         {statusError && <p role="alert" className="mb-3 text-sm text-red-700">暂时无法获取任务状态，正在重试。</p>}
         {task?.enabled === false && <p className="mb-3 text-sm text-gray-600">新闻联播抓取已禁用。</p>}
         {(actionError || task?.errorMessage) && (
@@ -85,6 +91,18 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm text-gray-700">
+            抓取日期
+            <input type="date" className="rounded border px-2 py-1" value={date} max={today}
+              disabled={submitting || confirm}
+              onChange={event => {
+                if (!event.target.value || !event.target.validity.valid) return;
+                setTask(null);
+                setActionError('');
+                setStatusError(false);
+                setDate(event.target.value);
+              }} />
+          </label>
           {!running && (
             <button type="button" className="news-primary" disabled={!task?.enabled || submitting || confirm}
               onClick={() => status === 'completed' ? setConfirm(true) : collect()}>
@@ -104,12 +122,12 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
               prepare={target ? preparePublication : null}
               disabled={running || submitting || confirm} />
             <Link to="/wechat-settings" className="news-action">公众号后台扫码登录</Link>
-            {selectedRecord && <button type="button" className="news-action" onClick={() => setSelectedRecord(null)}>返回今日选稿</button>}
+            {selectedRecord && <button type="button" className="news-action" onClick={() => setSelectedRecord(null)}>返回所选日期选稿</button>}
           </div>
         </div>
         {confirm && (
           <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            <p>重新抓取成功后会更新当天主要内容。</p>
+            <p>重新抓取成功后会更新 {date} 的主要内容。</p>
             <div className="mt-2 flex gap-2">
               <button type="button" className="news-action" onClick={() => collect(true)}>确认</button>
               <button type="button" className="news-action" onClick={() => setConfirm(false)}>返回</button>
@@ -117,7 +135,11 @@ export default function XinwenlianboCollection({ refresh = 0 }) {
           </div>
         )}
       </section>
-      <XinwenlianboHistory refresh={refresh} task={task} busy={running || submitting} onTaskChange={setTask} onSelectPublication={selectPublication}
+      <XinwenlianboHistory refresh={refresh} task={task} busy={running || submitting}
+        onTaskChange={updated => {
+          if (updated.date === date) setTask(updated);
+          setStatusRevision(value => value + 1);
+        }} onSelectPublication={selectPublication}
         onRecordDeleted={id => setSelectedRecord(current => current?.id === id ? null : current)} />
     </>
   );

@@ -34,3 +34,17 @@ it('distinguishes an unpublished episode or introduction from an HTTP failure', 
   await expect(collectCctvNews(date, fetchPage)).resolves.toMatchObject({ status: 'pending', message: expect.stringContaining('内容简介') });
   await expect(collectCctvNews(date, fetchPage)).rejects.toThrow('HTTP 503');
 });
+
+it('retries a connection timeout once and reports a repeated timeout', async () => {
+  const timeout = new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+  const fetchPage = jest.fn()
+    .mockResolvedValueOnce(new Response(listing))
+    .mockRejectedValueOnce(timeout)
+    .mockResolvedValueOnce(new Response('<div class="video_brief">节目简介</div>'))
+    .mockRejectedValue(timeout);
+
+  await expect(collectCctvNews(date, fetchPage)).resolves.toMatchObject({ status: 'ready' });
+  expect(fetchPage.mock.calls.map(([url]) => url)).toEqual([CCTV_COLUMN, firstUrl, firstUrl]);
+  await expect(collectCctvNews(date, fetchPage)).rejects.toThrow('连接央视网超时');
+  expect(fetchPage).toHaveBeenCalledTimes(5);
+});

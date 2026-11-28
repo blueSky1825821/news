@@ -78,7 +78,7 @@ export default function WechatPushManager({ massSendEnabled = false }) {
   }
   return <section className="mt-8 space-y-4 rounded-lg border bg-white p-6">
     <h2 className="text-lg font-semibold">{massSendEnabled ? '主动推送新闻' : '生成公众号发布内容'}</h2>
-    <p className="text-sm text-gray-600">选择 1 篇生成单条新闻，选择多篇生成固定新闻列表。{massSendEnabled ? '通过公众号接口发送标题和平台链接，实际发送受接口权限与额度限制。' : '生成后可预览正文并自动发表到公众号。'}</p>
+    <p className="text-sm text-gray-600">选择 1 篇生成单条新闻，选择多篇生成固定新闻列表。{massSendEnabled ? '通过公众号接口发送标题和平台链接，实际发送受接口权限与额度限制。' : '生成后可预览正文并保存到公众号草稿箱。'}</p>
     <button onClick={load} disabled={busy} className="rounded bg-gray-100 px-3 py-2 text-sm">刷新新闻与记录</button>
     {categories.length > 0 && (
       <div role="group" aria-label="新闻标签筛选" className="flex flex-wrap gap-2">

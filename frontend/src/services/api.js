@@ -236,11 +236,15 @@ export const api = {
   },
 
   // Xinwenlianbo
-  getXinwenlianboStatus(options = {}) {
-    return request('/api/xinwenlianbo/status', options);
+  getXinwenlianboStatus({ date, ...options } = {}) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    return request(`/api/xinwenlianbo/status${query}`, options);
   },
-  triggerXinwenlianbo({ force = false } = {}) {
-    return request(`/api/xinwenlianbo/trigger${force ? '?force=true' : ''}`, {
+  triggerXinwenlianbo({ date, force = false } = {}) {
+    const query = new URLSearchParams();
+    if (date) query.set('date', date);
+    if (force) query.set('force', 'true');
+    return request(`/api/xinwenlianbo/trigger${query.size ? `?${query}` : ''}`, {
       method: 'POST'
     });
   },

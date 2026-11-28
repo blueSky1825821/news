@@ -182,7 +182,7 @@ export default function WechatSettings() {
 
       <section className="mt-8 space-y-3 rounded-lg border bg-white p-6">
         <h2 className="text-lg font-semibold">微信公众平台登录</h2>
-        <p className="text-sm text-gray-600">发表新闻前可先扫码登录。微信要求核验时，请在发表页面继续扫码确认。</p>
+        <p className="text-sm text-gray-600">保存公众号草稿前可先扫码登录。草稿保存后，可在微信公众平台手动发表。</p>
         <WechatAutoPublish loginOnly />
       </section>
       <WechatPushManager massSendEnabled={settings.massSendEnabled} />

@@ -51,11 +51,11 @@ function taskError(message, statusCode, code = statusCode) {
   return Object.assign(new Error(message), { statusCode, code });
 }
 
-export function getXinwenlianboStatus() {
-  const date = activeTask?.date ?? getXinwenlianboDate();
+export function getXinwenlianboStatus(date = activeTask?.date ?? getXinwenlianboDate()) {
   const task = normalizeRecord(findTaskByDate(date));
   return {
     date,
+    activeDate: activeTask?.date ?? null,
     status: task?.status ?? 'pending',
     startedAt: task?.startedAt ?? null,
     completedAt: task?.completedAt ?? null,
@@ -71,7 +71,7 @@ export function startXinwenlianboTask(date, { force = false } = {}) {
   const config = getXinwenlianboConfig();
   if (!config.enabled) throw taskError('新闻联播抓取已禁用', 409, 1004);
   if (!force && hasPublishedIntroduction(date)) {
-    throw taskError('今天的新闻已抓取，请选择重新抓取', 409, 1002);
+    throw taskError('该日期的新闻已抓取，请选择重新抓取', 409, 1002);
   }
   const source = findBroadcastSource();
   if (!source) throw taskError('没有找到 CCTV 新闻联播来源', 400);

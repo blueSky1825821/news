@@ -82,7 +82,7 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange,
   const [detailsId, setDetailsId] = useState(null);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
-  const revision = `${refresh}:${task?.date}:${task?.status}:${task?.completedAt}`;
+  const revision = `${refresh}:${task?.date}:${task?.status}:${task?.completedAt}:${task?.activeDate}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -152,7 +152,7 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange,
           {result.items.map(record => {
             const expanded = detailsId === record.id;
             const confirmingDelete = deleteTarget === record.id;
-            const activeRecord = busy && task?.date === record.taskDate;
+            const activeRecord = busy && (task?.activeDate ?? task?.date) === record.taskDate;
             return (
               <li key={record.id} className="py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">

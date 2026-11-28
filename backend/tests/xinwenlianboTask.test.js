@@ -51,6 +51,16 @@ describe('Xinwenlianbo CCTV task', () => {
     await expect(runXinwenlianboTask(date)).resolves.toMatchObject({ status: 'completed' });
   });
 
+  it('tracks a historical episode through completion without changing today’s status', async () => {
+    const date = '2026-11-23';
+    const task = startXinwenlianboTask(date);
+    expect(getXinwenlianboStatus(date)).toMatchObject({ date, status: 'collecting', activeDate: date });
+    expect(getXinwenlianboStatus(getXinwenlianboDate())).toMatchObject({ status: 'pending', activeDate: date });
+    const { articleId } = await task.completion;
+    expect(collectCctvNews).toHaveBeenCalledWith(date);
+    expect(getXinwenlianboStatus(date)).toMatchObject({ date, status: 'completed', articleId, activeDate: null });
+  });
+
   it('keeps the previous article available when a forced refresh fails', async () => {
     const date = getXinwenlianboDate();
     const { articleId } = await startXinwenlianboTask(date).completion;

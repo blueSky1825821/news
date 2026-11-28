@@ -11,9 +11,19 @@ const router = Router();
 
 router.use(authMiddleware, adminMiddleware);
 
+function requestedDate(value) {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      value >= '0001-01-01' && value <= getXinwenlianboDate()) {
+    const date = new Date(value);
+    if (Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value) return value;
+  }
+  throw Object.assign(new Error('请选择有效的抓取日期，最晚为北京时间当天'), { statusCode: 400 });
+}
+
 router.get('/status', (req, res, next) => {
   try {
-    res.sendJson(0, 'success', getXinwenlianboStatus());
+    res.sendJson(0, 'success', getXinwenlianboStatus(requestedDate(req.query.date)));
   } catch (err) {
     next(err);
   }
@@ -21,7 +31,7 @@ router.get('/status', (req, res, next) => {
 
 router.post('/trigger', (req, res, next) => {
   try {
-    const { status, completion } = startXinwenlianboTask(getXinwenlianboDate(), {
+    const { status, completion } = startXinwenlianboTask(requestedDate(req.query.date) ?? getXinwenlianboDate(), {
       force: req.query.force === 'true'
     });
     completion.catch(err => logConsole('error', '[Xinwenlianbo] Manual task failed:', err.message));

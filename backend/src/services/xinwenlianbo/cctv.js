@@ -27,9 +27,20 @@ function findEpisodeUrl(html, date) {
 }
 
 async function fetchPage(url, fetchPageResponse) {
-  const response = await fetchPageResponse(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`央视网请求失败（HTTP ${response.status}）`);
-  return response.text();
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetchPageResponse(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new Error(`央视网请求失败（HTTP ${response.status}）`);
+      return await response.text();
+    } catch (err) {
+      const connectTimeout = err.cause?.code === 'UND_ERR_CONNECT_TIMEOUT';
+      if (!connectTimeout && err.name !== 'TimeoutError') throw err;
+      if (attempt === 2) {
+        const message = connectTimeout ? '连接央视网超时' : '等待央视网响应超时';
+        throw new Error(`${message}（已自动重试一次）`, { cause: err });
+      }
+    }
+  }
 }
 
 function readIntroduction(html) {
@@ -47,9 +58,9 @@ function readIntroduction(html) {
 
 export async function collectCctvNews(date, fetchPageResponse = fetch) {
   const originalUrl = findEpisodeUrl(await fetchPage(CCTV_COLUMN, fetchPageResponse), date);
-  if (!originalUrl) return { status: 'pending', message: '央视网尚未发布当天的新闻联播完整版' };
+  if (!originalUrl) return { status: 'pending', message: `央视网栏目页暂未找到 ${date} 的新闻联播完整版` };
 
   const text = readIntroduction(await fetchPage(originalUrl, fetchPageResponse));
-  if (!text) return { status: 'pending', message: '央视网尚未发布当天的完整版内容简介' };
+  if (!text) return { status: 'pending', message: `央视网暂未提供 ${date} 的完整版内容简介` };
   return { status: 'ready', originalUrl, text };
 }

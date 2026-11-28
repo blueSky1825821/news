@@ -2,18 +2,20 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../services/api.js';
 
 const storageKey = 'news-wechat-publication';
-const pending = ['starting', 'login_scan', 'preparing', 'publishing', 'publish_scan'];
+const pending = ['starting', 'login_scan', 'preparing', 'saving', 'publishing', 'publish_scan'];
 const messages = {
   starting: '正在打开微信公众平台…',
-  login_scan: '请用有公众号管理权限的微信扫码，并在手机上确认登录。确认后自动继续发表。',
+  login_scan: '请用有公众号管理权限的微信扫码，并在手机上确认登录。',
   preparing: '已登录，正在填写图文及封面…',
   publishing: '正在等待微信确认发表结果…',
   publish_scan: '微信要求核验发表操作，请扫码并在手机上确认。',
-  logged_in: '登录已确认，发表时会尝试复用本次会话。',
+  logged_in: '登录已确认，保存草稿时会尝试复用本次会话。',
+  saving: '正在保存到公众号草稿箱…',
+  draft_saved: '已保存到公众号草稿箱，可前往微信公众平台检查并手动发表。',
   published: '微信已确认发表成功。',
   unknown: '发表结果待核对。请到微信公众平台检查发表记录。',
-  failed: '发表未完成，请重试。',
-  idle: '发表任务已中断，请重新生成或选择内容。'
+  failed: '草稿未确认保存，请先检查公众号草稿箱。',
+  idle: '草稿任务已中断，请重新生成或选择内容。'
 };
 
 export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly = false }) {
@@ -102,10 +104,10 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
       : messages[job?.status || 'starting'];
   const taskMessage = job?.message || statusMessage;
   const failed = ['failed', 'unknown', 'idle'].includes(job?.status);
-  const alreadySubmitted = jobId === pushId && ['published', 'unknown'].includes(job?.status);
+  const alreadySubmitted = jobId === pushId && ['draft_saved', 'published', 'unknown'].includes(job?.status);
   return <div className="space-y-2">
     {(loginOnly || pushId || prepare) && <button type="button" onClick={start} disabled={disabled || starting || running || alreadySubmitted}
-      className="rounded bg-green-700 px-4 py-2 text-sm text-white disabled:opacity-50">{loginOnly ? '扫码登录公众号' : '自动发表到公众号'}</button>}
+      className="rounded bg-green-700 px-4 py-2 text-sm text-white disabled:opacity-50">{loginOnly ? '扫码登录公众号' : '保存到公众号草稿箱'}</button>}
     {(job || starting || running) && <p role={failed && !starting ? "alert" : "status"} className={failed && !starting ? "text-sm text-red-600" : "text-sm text-gray-700"}>
       {starting ? messages.starting : taskMessage}
     </p>}
