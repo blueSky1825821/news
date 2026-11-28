@@ -1,7 +1,10 @@
 import { logConsole } from '../../utils/logger.js';
+import { getAdminEmails, getUserRole } from '../../middleware/auth.js';
+import { findUserByEmail } from '../../models/user.js';
 import { getSetting } from '../../models/settings.js';
 import { runAutomaticAnalysis } from './analysis.js';
 import { collectCctvNews } from './cctv.js';
+import { sendXinwenlianboReadyEmail } from '../mailer.js';
 import {
   findTaskByDate, findTaskById, hasPublishedIntroduction, findBroadcastSource,
   markCollecting, markPending, markFailed, publishIntroduction, listTasks, deleteTask
@@ -70,15 +73,17 @@ export function startXinwenlianboTask(date, { force = false } = {}) {
   if (activeTask) throw taskError('已有新闻联播任务正在处理', 409, 1003);
   const config = getXinwenlianboConfig();
   if (!config.enabled) throw taskError('新闻联播抓取已禁用', 409, 1004);
-  if (!force && hasPublishedIntroduction(date)) {
+  const previouslyPublished = hasPublishedIntroduction(date);
+  if (!force && previouslyPublished) {
     throw taskError('该日期的新闻已抓取，请选择重新抓取', 409, 1002);
   }
   const source = findBroadcastSource();
   if (!source) throw taskError('没有找到 CCTV 新闻联播来源', 400);
 
+  const notify = !hasPublishedIntroduction(date, { includeInterruptedRefresh: true }) && !findTaskByDate(date)?.completedAt;
   markCollecting(date);
   activeTask = { date };
-  const completion = processCctvNews(date, source.id).finally(() => { activeTask = null; });
+  const completion = processCctvNews(date, source.id, notify).finally(() => { activeTask = null; });
   return { status: getXinwenlianboStatus(), completion };
 }
 
@@ -91,7 +96,16 @@ export async function runXinwenlianboTask(date) {
   }
 }
 
-async function processCctvNews(date, sourceId) {
+async function notifyAdministrators(date) {
+  const admins = getAdminEmails().map(findUserByEmail).filter(user => getUserRole(user) === 'admin');
+  const results = await Promise.allSettled(admins.map(({ email }) => sendXinwenlianboReadyEmail(email, date)));
+  const failed = results.filter(result => result.status === 'rejected').length;
+  logConsole(failed ? 'error' : 'log', '[Xinwenlianbo] Administrator notification', {
+    date, sent: results.length - failed, failed
+  });
+}
+
+async function processCctvNews(date, sourceId, notify) {
   try {
     beginStep('collecting');
     const news = await collectCctvNews(date);
@@ -103,6 +117,9 @@ async function processCctvNews(date, sourceId) {
     beginStep('publish-introduction');
     const result = publishIntroduction(date, sourceId, news);
     logConsole('log', '[Xinwenlianbo] Task completed', { date, articleId: result.articleId, ...currentProgress() });
+    if (notify) notifyAdministrators(date).catch(err => {
+      logConsole('error', '[Xinwenlianbo] Administrator notification failed', { date, code: err.code });
+    });
     runAutomaticAnalysis(result.articleId).catch(err => {
       logConsole('error', '[Xinwenlianbo] Automatic analysis failed', { date, articleId: result.articleId, message: err.message });
     });

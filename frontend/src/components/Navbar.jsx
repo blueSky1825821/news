@@ -1,4 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
+import logo from '../../../wenxu.png';
 import ThemeSwitch from './ThemeSwitch.jsx';
 
 export default function Navbar({ user, isLoading, onLogout }) {
@@ -35,7 +36,9 @@ export default function Navbar({ user, isLoading, onLogout }) {
         </div>
       </div>
       <div className="news-shell news-masthead">
-        <Link to="/" className="news-wordmark">闻序</Link>
+        <Link to="/" className="news-wordmark">
+          <img src={logo} alt="闻序首页" width="1254" height="1254" />
+        </Link>
         <span className="news-masthead-description">新闻阅读与播报</span>
       </div>
       <nav className="news-nav" aria-label="主导航">

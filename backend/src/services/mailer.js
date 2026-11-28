@@ -26,8 +26,18 @@ function emailLink(page, token) {
   url.pathname = `${basePath.endsWith('/news') ? basePath : `${basePath}/news`}/${page}`;
   url.search = '';
   url.hash = '';
-  url.searchParams.set('token', token);
+  if (token) url.searchParams.set('token', token);
   return url.href;
+}
+
+export async function sendXinwenlianboReadyEmail(to, date) {
+  if (!SMTP_HOST) throw new Error('SMTP_HOST 未配置');
+  await transporter.sendMail({
+    from: SMTP_FROM,
+    to,
+    subject: `${date} 新闻联播已抓取，可以手动发表`,
+    text: `${date} 的央视新闻联播主要内容已抓取。请进入来源管理，选取该日稿件并保存到公众号草稿箱，然后在微信公众平台手动发表。\n\n${emailLink('sources')}`
+  });
 }
 
 export async function sendVerificationEmail(to, token) {

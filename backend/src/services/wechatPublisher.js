@@ -277,16 +277,18 @@ async function prepareArticle(page, push, token, broadcast, beginStep) {
 }
 
 async function selectCover(page, beginStep) {
-  beginStep('cover_selection', '未能从微信图片库选择 news.png 作为封面。');
+  const filename = 'wenxu.png';
+  beginStep('cover_selection', `未能从微信图片库选择 loog/${filename} 作为封面。`);
   const coverArea = page.getByText('拖拽或选择封面', { exact: true }).filter({ visible: true }).first();
   await coverArea.or(visible(page, '.js_cover_btn_area')).first().click();
   await page.getByText(/^(从图片库选择|从图片库选取)$/).filter({ visible: true }).first().click();
 
   const library = page.locator(dialogs).filter({ hasText: '选择图片' }).first();
   await library.getByText(/^我的图片(?:\s*\(\d+\))?$/).filter({ visible: true }).first().click();
-  await library.getByText('news.png', { exact: true }).filter({ visible: true }).first().click();
+  await library.getByText(/^loog(?:\s*[（(]\d+[）)])?$/).filter({ visible: true }).first().click();
+  await library.getByText(filename, { exact: true }).filter({ visible: true }).first().click();
 
-  beginStep('cover_confirmation', '已选择 news.png，但未能确认封面。');
+  beginStep('cover_confirmation', `已选择 ${filename}，但未能确认封面。`);
   const coverDialog = page.locator(dialogs).filter({ hasText: /选择图片|裁剪图片|裁剪封面|编辑封面|设置封面/ }).first();
   const confirm = button(coverDialog, /^\s*(确定|确认|完成)\s*$/);
   const next = button(library, /^\s*下一步\s*$/);

@@ -170,7 +170,7 @@ export default function XinwenlianboHistory({ refresh, task, busy, onTaskChange,
                     {record.articleId && <Link to={`/article/${record.articleId}`} className="news-action">查看新闻</Link>}
                     {record.articleId && record.status === 'completed' && (
                       <button type="button" className="news-action" disabled={busy || deleting}
-                        onClick={() => onSelectPublication(record)}>选作公众号发表</button>
+                        onClick={() => onSelectPublication(record)}>选作公众号草稿</button>
                     )}
                     <button type="button" className="news-action text-red-700"
                       disabled={activeRecord || deleting || confirmingDelete}

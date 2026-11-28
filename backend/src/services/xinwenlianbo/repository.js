@@ -22,11 +22,11 @@ export function findTaskById(id, db = getDb()) {
   `).get(id);
 }
 
-export function hasPublishedIntroduction(date) {
+export function hasPublishedIntroduction(date, { includeInterruptedRefresh = false } = {}) {
   return Boolean(getDb().prepare(`
     SELECT 1 FROM xinwenlianbo_tasks
-    WHERE taskDate = ? AND status = 'completed' AND json_extract(webNews, '$.format') = ?
-  `).get(date, INTRODUCTION_FORMAT));
+    WHERE taskDate = ? AND (status = 'completed' OR ?) AND json_extract(webNews, '$.format') = ?
+  `).get(date, Number(includeInterruptedRefresh), INTRODUCTION_FORMAT));
 }
 
 export function findBroadcastSource() {

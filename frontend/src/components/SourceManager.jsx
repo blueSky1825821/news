@@ -169,31 +169,31 @@ export default function SourceManager() {
 
   return (
     <div className="w-full">
-      <header className="news-section-header">
+      <header className="news-section-header source-manager-header">
         <div>
           <h1>来源健康管理</h1>
           <p className="mt-1 text-sm text-gray-500">
-            连续失败达到阈值的来源会自动停用，可在此重新激活或删除来源
+            检查抓取状态、处理失败来源，并管理新闻联播任务。
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/"
-            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            className="news-action"
           >
             返回首页
           </Link>
           <button
             onClick={() => { fetchHealth(); setCollectionRefresh(value => value + 1); }}
             disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="news-action disabled:opacity-50"
           >
             {loading ? '刷新中...' : '刷新'}
           </button>
           <button
             onClick={handleCrawlAll}
             disabled={crawlingAll}
-            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            className="news-primary min-h-10 disabled:opacity-50"
           >
             {crawlingAll ? '抓取中...' : '全部抓取'}
           </button>
@@ -204,165 +204,171 @@ export default function SourceManager() {
         <XinwenlianboCollection refresh={collectionRefresh} />
       )}
 
-      {inactiveCount > 0 && (
-        <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-yellow-800">
-              当前有 {inactiveCount} 个来源处于停用状态
-            </span>
-            <button
-              onClick={handleActivateAll}
-              className="rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-700"
-            >
-              全部重新激活
-            </button>
+      <section aria-labelledby="source-register-title" className="source-register">
+        <header className="source-register-header">
+          <h2 id="source-register-title">新闻来源</h2>
+          <p>{sources.length} 个来源，{sources.length - inactiveCount} 个活跃</p>
+        </header>
+        {inactiveCount > 0 && (
+          <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-yellow-800">
+                当前有 {inactiveCount} 个来源处于停用状态
+              </span>
+              <button
+                onClick={handleActivateAll}
+                className="rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-700"
+              >
+                全部重新激活
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-600">
+            加载失败：{error}
+          </div>
+        )}
+
+        <div className="source-register-settings">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <label htmlFor="threshold" className="block text-sm font-medium text-gray-700">
+                自动停用阈值
+              </label>
+              <p className="text-xs text-gray-500">
+                来源连续失败多少次后自动停用（最小 1）
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="threshold"
+                type="number"
+                min={1}
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={handleUpdateThreshold}
+                disabled={thresholdLoading}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {thresholdLoading ? '保存中...' : '保存阈值'}
+              </button>
+            </div>
           </div>
         </div>
-      )}
 
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-600">
-          加载失败：{error}
-        </div>
-      )}
-
-      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <label htmlFor="threshold" className="block text-sm font-medium text-gray-700">
-              自动停用阈值
-            </label>
-            <p className="text-xs text-gray-500">
-              来源连续失败多少次后自动停用（最小 1）
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              id="threshold"
-              type="number"
-              min={1}
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-            <button
-              onClick={handleUpdateThreshold}
-              disabled={thresholdLoading}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {thresholdLoading ? '保存中...' : '保存阈值'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {loading && sources.length === 0 ? (
-        <div className="py-12 text-center text-gray-500">加载中...</div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  来源
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  状态
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  连续失败
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  更新时间
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
-                  最后错误
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sources.map((source) => (
-                <tr key={source.id} className={!source.isActive ? 'bg-red-50' : ''}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium text-gray-900">{source.name}</div>
-                      {source.type === 'xinwenlianbo' && (
-                        <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-                          📺 新闻联播
+        {loading && sources.length === 0 ? (
+          <div className="py-12 text-center text-gray-500">加载中...</div>
+        ) : (
+          <div className="source-register-scroll">
+            <table className="source-register-table min-w-full divide-y divide-gray-200" role="table" aria-labelledby="source-register-title">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    来源
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    状态
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    连续失败
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    最新文章
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                    最后错误
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {sources.map((source) => (
+                  <tr key={source.id} className={!source.isActive ? 'bg-red-50' : ''}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">{source.name}</div>
+                        {source.type === 'xinwenlianbo' && (
+                          <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                            📺 新闻联播
+                          </span>
+                        )}
+                      </div>
+                      <div className="source-register-url max-w-xs truncate text-xs text-gray-500">{source.rssUrl}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {source.isActive ? (
+                        <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                          活跃
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                          已停用
                         </span>
                       )}
-                    </div>
-                    <div className="max-w-xs truncate text-xs text-gray-500">{source.rssUrl}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {source.isActive ? (
-                      <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                        活跃
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
-                        已停用
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
-                    {source.consecutiveFailures || 0}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">
-                    <div>最新文章 {formatHealthTime(source.latestArticleAt)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {source.lastError ? (
-                      <div className="max-w-xs">
-                        <div className="truncate text-sm text-red-600" title={source.lastError}>
-                          {source.lastError}
+                    </td>
+                    <td data-label="连续失败" className="px-4 py-3 text-sm tabular-nums text-gray-700">
+                      {source.consecutiveFailures || 0}
+                    </td>
+                    <td data-label="最新文章" className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">
+                      {formatHealthTime(source.latestArticleAt)}
+                    </td>
+                    <td data-label="最后错误" className="px-4 py-3">
+                      {source.lastError ? (
+                        <div className="max-w-xs">
+                          <div className="source-register-error truncate text-sm text-red-600" title={source.lastError}>
+                            {source.lastError}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {source.lastErrorAt ? new Date(source.lastErrorAt).toLocaleString('zh-CN') : '-'}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {source.lastErrorAt ? new Date(source.lastErrorAt).toLocaleString('zh-CN') : '-'}
-                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
+                        {source.type !== 'xinwenlianbo' && (
+                          <button
+                            onClick={() => handleCrawl(source.id)}
+                            disabled={crawlingIds.has(source.id) || !source.isActive}
+                            className="rounded-md bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
+                          >
+                            {crawlingIds.has(source.id) ? '抓取中...' : '抓取'}
+                          </button>
+                        )}
+                        {!source.isActive && (
+                          <button
+                            onClick={() => handleActivate(source.id)}
+                            disabled={activatingIds.has(source.id)}
+                            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {activatingIds.has(source.id) ? '激活中...' : '重新激活'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDelete(source)}
+                          disabled={deletingIds.has(source.id)}
+                          className="rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 disabled:opacity-50"
+                        >
+                          {deletingIds.has(source.id) ? '删除中...' : '删除'}
+                        </button>
                       </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      {source.type !== 'xinwenlianbo' && (
-                        <button
-                          onClick={() => handleCrawl(source.id)}
-                          disabled={crawlingIds.has(source.id) || !source.isActive}
-                          className="rounded-md bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
-                        >
-                          {crawlingIds.has(source.id) ? '抓取中...' : '抓取'}
-                        </button>
-                      )}
-                      {!source.isActive && (
-                        <button
-                          onClick={() => handleActivate(source.id)}
-                          disabled={activatingIds.has(source.id)}
-                          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {activatingIds.has(source.id) ? '激活中...' : '重新激活'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDelete(source)}
-                        disabled={deletingIds.has(source.id)}
-                        className="rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 disabled:opacity-50"
-                      >
-                        {deletingIds.has(source.id) ? '删除中...' : '删除'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

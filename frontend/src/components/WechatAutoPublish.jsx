@@ -107,7 +107,7 @@ export default function WechatAutoPublish({ pushId, prepare, disabled, loginOnly
   const alreadySubmitted = jobId === pushId && ['draft_saved', 'published', 'unknown'].includes(job?.status);
   return <div className="space-y-2">
     {(loginOnly || pushId || prepare) && <button type="button" onClick={start} disabled={disabled || starting || running || alreadySubmitted}
-      className="rounded bg-green-700 px-4 py-2 text-sm text-white disabled:opacity-50">{loginOnly ? '扫码登录公众号' : '保存到公众号草稿箱'}</button>}
+      className="min-h-11 w-full rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 sm:w-auto">{loginOnly ? '扫码登录公众号' : '保存到公众号草稿箱'}</button>}
     {(job || starting || running) && <p role={failed && !starting ? "alert" : "status"} className={failed && !starting ? "text-sm text-red-600" : "text-sm text-gray-700"}>
       {starting ? messages.starting : taskMessage}
     </p>}

@@ -1,9 +1,12 @@
 import jwt from 'jsonwebtoken';
 import { findUserById, isWechatUser } from '../models/user.js';
 
+export function getAdminEmails() {
+  return [...new Set((process.env.ADMIN_EMAILS || '').split(',').map(email => email.trim().toLowerCase()).filter(Boolean))];
+}
+
 export function getUserRole(user) {
-  const admins = (process.env.ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean);
-  return user && !isWechatUser(user.id) && admins.includes(user.email.toLowerCase()) ? 'admin' : 'user';
+  return user && getAdminEmails().includes(user.email.toLowerCase()) && !isWechatUser(user.id) ? 'admin' : 'user';
 }
 
 export function adminMiddleware(req, res, next) {

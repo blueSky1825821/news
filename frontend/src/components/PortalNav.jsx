@@ -130,7 +130,7 @@ export default function PortalNav() {
             <span className="text-3xl">📺</span>
             <div>
               <h2 className="text-lg font-bold text-red-800">新闻联播</h2>
-              <p className="text-sm text-red-600">每日 19:00 自动抓取 CCTV 新闻联播音频并 AI 摘要</p>
+              <p className="text-sm text-red-600">北京时间每天 19:00 起，每分钟检查央视网，抓取完成后通知管理员。</p>
             </div>
           </div>
           <Link
